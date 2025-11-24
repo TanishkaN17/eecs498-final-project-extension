@@ -454,6 +454,41 @@ class EnginePlanner:
         Returns:
             bool: True to continue, False to terminate.
         """
+        # First, check for explicit completion signals (before calling LLM to save API calls)
+        results_str = str(agents_results).lower()
+        
+        # Check if judge has made a final decision (but exclude waiting messages)
+        # Look for positive indicators that judge has DECIDED, not that it's waiting
+        judge_final_decision_keywords = [
+            "final chosen translation",
+            "i choose",
+            "i select",
+            "my final decision is"
+        ]
+        
+        # Exclude waiting messages
+        waiting_indicators = [
+            "waiting for both",
+            "not yet received",
+            "before making my final",
+            "i am waiting"
+        ]
+        
+        # Only stop if we find decision keywords AND not waiting
+        has_decision_keyword = any(keyword in results_str for keyword in judge_final_decision_keywords)
+        is_waiting = any(indicator in results_str for indicator in waiting_indicators)
+        
+        if has_decision_keyword and not is_waiting:
+            self.logger.info("Judge has made a final decision. Terminating simulation.")
+            return False
+        
+        # Check if task is a translation task and if a final translation has been provided
+        if "translate" in self.task.lower() and "final_translation" in results_str:
+            # Check if we have a complete translation result
+            if '"final_translation"' in results_str or "'final_translation'" in results_str:
+                self.logger.info("Final translation has been determined. Terminating simulation.")
+                return False
+        
         prompt = (
             "Based on the following agents' results, determine whether the overall task is completed.\n\n"
             f"Task Description:\n{self.task}\n\n"
@@ -464,6 +499,8 @@ class EnginePlanner:
 
         prompt += (
             "\nRespond with a JSON object containing a single key 'continue' set to true or false.\n"
+            "IMPORTANT: If a judge agent has made a final decision (e.g., 'elijo como la traducción final', 'final decision', 'chosen translation'), "
+            "or if a final translation has been determined, the task is COMPLETE and you should return {\"continue\": false}.\n"
             "Sometimes the results may include a key 'success' with a value of true, but that only indicates the tool executed successfully, "
             "not that the task is complete.\n"
             "If there meets an error of the results and unfinished, please respond with a JSON object containing a single key 'continue' set to True.\n"
@@ -474,7 +511,8 @@ class EnginePlanner:
             "}"
         )
 
-        messages = [{"role": "system", "content": prompt}]
+        # Anthropic requires first message to be 'user', not 'system'
+        messages = [{"role": "user", "content": prompt}]
         response = model_prompting(
             llm_model=self.model,
             messages=messages,

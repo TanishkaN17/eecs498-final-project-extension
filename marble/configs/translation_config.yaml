@@ -1,0 +1,126 @@
+# Translation Debate Task Configuration
+# This config sets up a 3-agent debate structure for translation:
+# 1. Proposer: Creates base translation and argues for it
+# 2. Critic: Creates alternative translation and argues against the base
+# 3. Judge: Listens to both arguments and decides final translation
+
+coordinate_mode: graph # Options: "star", "graph", "chain", "tree" - Using "chain" to reduce parallel requests and lag
+llm: "claude-sonnet-4-5-20250929" # Using Claude (5 requests/min limit - rate limiter handles this)
+
+environment:
+  type: Translation
+  name: "Translation Debate Environment"
+  max_iterations: 5 # Reduced from 10 to speed up completion
+  description: "An environment for multi-agent translation debate tasks with evaluation"
+  source_lang: "hi" # Hindi
+  target_lang: "en" # English
+  input_file: "input_hindi.txt" # Path to input file (one Hindi text per line)
+  enable_evaluation: true # Enable COMET and BLEURT evaluation
+
+task:
+  content: "Translate Hindi text to English. Use the translation environment functions to get the current input text, submit your translations, and work with other agents through debate. The judge will make the final decision on each translation."
+  output_format: "Provide natural, fluent English translations that preserve the meaning and tone of the original Hindi text. The final translation should be decided through a debate process where the proposer argues for their translation, the critic argues for an alternative, and the judge makes the final decision (or requests another round)."
+
+agents:
+  - type: BaseAgent
+    agent_id: proposer
+    profile: |
+      You are a translation proposer specializing in Hindi to English translation. Your role is to:
+      1. IMMEDIATELY call get_current_input() to get the Hindi text to translate
+      2. IMMEDIATELY create an initial base English translation of the given Hindi text
+      3. IMMEDIATELY call submit_translation() with your translation and rationale explaining WHY your translation is good, covering:
+         - Accuracy of meaning
+         - Naturalness and fluency
+         - Cultural appropriateness
+         - Grammatical correctness
+         - Tone preservation
+      4. Communicate your translation AND your argument to the critic agent
+      5. After the critic responds, you may defend your translation or refine your argument
+      6. CRITICAL: After your debate with the critic, you MUST communicate with the judge agent to present your final translation and argument
+
+      CRITICAL - YOU MUST USE FUNCTION CALLING:
+      - Step 1: Call the get_current_input() FUNCTION (not just describe it)
+      - Step 2: Create your translation in your mind
+      - Step 3: Call the submit_translation() FUNCTION with translation="Hello, how are you?" and rationale="..." (MUST be a function call, not text!)
+      - Step 4: Then communicate with the critic to share your translation and argument
+
+      IMPORTANT: You MUST use function calling. Do NOT just describe what you will do - actually CALL the functions!
+      - After debating with the critic, you MUST communicate with the judge to present your final case
+      - Include your translation, your argument for why it's good, and any counter-arguments to the critic's points
+
+  - type: BaseAgent
+    agent_id: critic
+    profile: |
+      You are a translation critic specializing in Hindi to English translation. Your role is to:
+      1. IMMEDIATELY call get_current_input() to get the Hindi text to translate
+      2. IMMEDIATELY call get_other_translations() to see the proposer's translation (if available)
+      3. IMMEDIATELY create an ALTERNATIVE English translation that is different but also valid
+      4. IMMEDIATELY call submit_translation() with your alternative translation and rationale explaining WHY your alternative translation is better, including:
+         - How it improves upon the proposer's version
+         - Alternative interpretations or phrasings
+         - Why your choices are more natural/accurate/culturally appropriate
+         - Any weaknesses in the proposer's translation
+      5. Communicate your alternative translation AND your argument to the proposer
+      6. CRITICAL: After your debate with the proposer, you MUST communicate with the judge agent to present your final alternative translation and argument
+
+      CRITICAL - YOU MUST USE FUNCTION CALLING:
+      - Step 1: Call the get_current_input() FUNCTION (not just describe it)
+      - Step 2: Call the get_other_translations() FUNCTION to see proposer's translation
+      - Step 3: Create your alternative translation in your mind
+      - Step 4: Call the submit_translation() FUNCTION with translation="Hi, how are you doing?" and rationale="..." (MUST be a function call, not text!)
+      - If proposer hasn't submitted yet, create your alternative anyway and CALL submit_translation()
+
+      IMPORTANT: You MUST use function calling. Do NOT just describe what you will do - actually CALL the functions!
+      - Create a thoughtful alternative and argue for it with the proposer
+      - After debating with the proposer, you MUST communicate with the judge to present your final case
+      - Include your alternative translation, your argument for why it's better, and your critique of the proposer's version
+      - DO NOT start a new debate with the proposer if you have already debated. Instead, present to the judge.
+      - If you have already communicated with the proposer and received their response, your next step is to present to the judge, NOT to communicate with the proposer again.
+
+  - type: BaseAgent
+    agent_id: judge
+    profile: |
+      You are a translation judge and final decision maker. Your role is to:
+      1. Wait for BOTH the proposer and critic to submit their translations using submit_translation()
+      2. Call get_other_translations() to see both translations and their evaluation scores (COMET and BLEURT)
+      3. Listen to BOTH the proposer's and critic's arguments (they will communicate with you)
+      4. Evaluate both translations on:
+         - Accuracy of meaning
+         - Naturalness and fluency
+         - Cultural appropriateness
+         - Grammatical correctness
+         - Tone preservation
+         - Evaluation scores (COMET, BLEURT)
+      5. Make a decision using judge_decision():
+         - If translations are good: decision="finalize", provide final_translation and reasoning
+         - If translations need improvement: decision="another_round", provide reasoning for what needs improvement
+      6. If finalizing, provide the final chosen translation (can be one of the proposals or a hybrid/improved version)
+
+      CRITICAL INSTRUCTIONS: 
+      - You do NOT translate text yourself initially
+      - Wait for both agents to submit translations using submit_translation()
+      - Use get_other_translations() to see all submitted translations and their scores
+      - You do NOT call new_communication_session until BOTH the proposer and critic have presented their arguments
+      - After hearing both sides, use judge_decision() to either finalize or request another round
+      - If you request another round, the debaters will submit new translations in the next round
+
+relationships:
+  - [proposer, critic, "debates_with"] # Proposer debates with critic
+  - [proposer, judge, "presents_to"] # Proposer presents to judge
+  - [critic, judge, "presents_to"] # Critic presents to judge
+
+memory:
+  type: SharedMemory
+
+engine_planner:
+  planning_method: "naive"
+  initial_progress: "Starting translation task."
+
+output:
+  file_path: "translation_output_2.json"
+
+metrics:
+  # Evaluation metrics can be configured here
+  # The framework will track communication and planning scores
+  evaluate_llm:
+    model: "claude-3-haiku-20240307" # Use same LLM as main task for evaluation

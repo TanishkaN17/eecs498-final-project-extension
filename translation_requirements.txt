@@ -1,0 +1,5 @@
+# Additional requirements for translation environment with evaluation
+unbabel-comet>=2.0.0
+bleurt>=0.0.1a2
+tensorflow>=2.0.0
+

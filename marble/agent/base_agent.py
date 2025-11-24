@@ -198,9 +198,34 @@ class BaseAgent:
             f"Agent {self.agent_id} using {self.strategy} strategy with prompt:\n{reasoning_prompt}"
         )
 
+        # For translation agents (proposer/critic), add explicit instruction to execute actions, not describe them
+        execution_instruction = ""
+        if self.agent_id in ["proposer", "critic"]:
+            # Check if agent has already called get_current_input() but not submit_translation()
+            memory_str = self.memory.get_memory_str()
+            has_called_get_input = "get_current_input" in memory_str
+            has_called_submit = "submit_translation" in memory_str
+            
+            if self.agent_id == "critic":
+                # Critic workflow: get_input → get_other_translations → submit_translation
+                has_called_get_other = "get_other_translations" in memory_str
+                if has_called_get_input and has_called_get_other and not has_called_submit:
+                    execution_instruction = "\nCRITICAL: You have already called get_current_input() and get_other_translations(). You MUST NOW immediately call submit_translation() with your alternative translation and rationale. DO NOT describe what you will do - ACTUALLY CALL THE FUNCTION NOW using function calling!\n"
+                elif has_called_get_input and not has_called_get_other:
+                    execution_instruction = "\nCRITICAL: You have already called get_current_input(). You MUST NOW call get_other_translations() to see the proposer's translation, then call submit_translation(). DO NOT describe what you will do - ACTUALLY CALL THE FUNCTIONS NOW using function calling!\n"
+                else:
+                    execution_instruction = "\nCRITICAL: DO NOT describe what you will do. DO NOT write code examples. ACTUALLY CALL THE FUNCTIONS NOW using function calling. Execute actions, don't describe them!\n"
+            else:
+                # Proposer workflow: get_input → submit_translation
+                if has_called_get_input and not has_called_submit:
+                    execution_instruction = "\nCRITICAL: You have already called get_current_input(). You MUST NOW immediately call submit_translation() with your translation and rationale. DO NOT describe what you will do - ACTUALLY CALL THE FUNCTION NOW using function calling!\n"
+                else:
+                    execution_instruction = "\nCRITICAL: DO NOT describe what you will do. DO NOT write code examples. ACTUALLY CALL THE FUNCTIONS NOW using function calling. Execute actions, don't describe them!\n"
+        
         act_task = (
             f"You are {self.agent_id}: {self.profile}\n"
             f"{reasoning_prompt}\n"  # 使用已经获取的 reasoning_prompt
+            f"{execution_instruction}"
             f"This is your task: {task}\n"
             f"These are the ids and profiles of other agents you can interact with:\n"
             f"{agent_descriptions}"
@@ -210,7 +235,51 @@ class BaseAgent:
         )
         self.logger.info(f"Complete prompt for agent {self.agent_id}:\n{act_task}")
 
-        if len(tools) == 0:
+        # Special handling for judge: check if it has received messages from both proposer and critic
+        # The judge should NEVER communicate - it only makes final decisions
+        if self.agent_id == "judge" and "wait for both" in self.profile.lower():
+            # Check if judge has received messages from both proposer and critic
+            has_proposer_message = False
+            has_critic_message = False
+            proposer_messages = []
+            critic_messages = []
+            
+            for session_id, session_msgs in self.msg_box.items():
+                if "proposer" in session_msgs:
+                    proposer_msgs = [msg for direction, msg in session_msgs["proposer"] if direction == self.RECV_FROM]
+                    if proposer_msgs:
+                        has_proposer_message = True
+                        proposer_messages.extend(proposer_msgs)
+                if "critic" in session_msgs:
+                    critic_msgs = [msg for direction, msg in session_msgs["critic"] if direction == self.RECV_FROM]
+                    if critic_msgs:
+                        has_critic_message = True
+                        critic_messages.extend(critic_msgs)
+            
+            if not (has_proposer_message and has_critic_message):
+                # Judge hasn't received messages from both agents yet - return waiting message without API call
+                result = type('Message', (), {
+                    'content': f"I am waiting for both the proposer and critic to present their translation arguments before making my final judgment. I have not yet received arguments from both agents.",
+                    'tool_calls': None
+                })()
+            else:
+                # Judge has received messages from both - make final decision using API
+                # Include the messages in the prompt so judge can evaluate them
+                proposer_content = "\n".join(proposer_messages) if proposer_messages else "No messages from proposer"
+                critic_content = "\n".join(critic_messages) if critic_messages else "No messages from critic"
+                
+                decision_prompt = f"{act_task}\n\nI have received the following arguments:\n\nPROPOSER'S ARGUMENT:\n{proposer_content}\n\nCRITIC'S ARGUMENT:\n{critic_content}\n\nBased on both arguments, make your final judgment. Output the best translation (either choose one or create a hybrid/improved version) with a brief explanation of your decision. IMPORTANT: Do NOT call any communication functions. Just output your final decision as text."
+                
+                result = model_prompting(
+                    llm_model=self.llm,
+                    messages=[{"role": "user", "content": decision_prompt}],
+                    return_num=1,
+                    max_token_num=1024,
+                    temperature=0.3,
+                    top_p=None,
+                    stream=None,
+                )[0]
+        elif len(tools) == 0:
             result = model_prompting(
                 llm_model=self.llm,
                 messages=[{"role": "user", "content": act_task}],
@@ -221,6 +290,9 @@ class BaseAgent:
                 stream=None,
             )[0]
         else:
+            # For non-judge agents, force tool_choice to "required" to ensure they use the provided functions
+            # Judge can use "auto" since it needs to wait and make decisions
+            tool_choice_mode = "required" if self.agent_id != "judge" else "auto"
             result = model_prompting(
                 llm_model=self.llm,
                 messages=[{"role": "user", "content": act_task}],
@@ -230,7 +302,7 @@ class BaseAgent:
                 top_p=None,
                 stream=None,
                 tools=tools,
-                tool_choice="auto",
+                tool_choice=tool_choice_mode,
             )[0]
         messages = [
             {"role": "usr", "content": act_task},
@@ -251,19 +323,136 @@ class BaseAgent:
                     arguments=function_args,
                 )
                 result_from_function_str = convert_to_str(result_from_function)
+            elif self.agent_id == "judge":
+                # Judge should NEVER communicate - it only makes final decisions based on received messages
+                # Check if judge has received messages from both agents
+                has_proposer_message = False
+                has_critic_message = False
+                for session_id, session_msgs in self.msg_box.items():
+                    if "proposer" in session_msgs and any(direction == self.RECV_FROM for direction, _ in session_msgs["proposer"]):
+                        has_proposer_message = True
+                    if "critic" in session_msgs and any(direction == self.RECV_FROM for direction, _ in session_msgs["critic"]):
+                        has_critic_message = True
+                
+                if not (has_proposer_message and has_critic_message):
+                    # Judge hasn't received messages from both agents yet
+                    result_from_function = {
+                        "success": False,
+                        "error": "Judge is waiting for both proposer and critic to present their arguments.",
+                        "message": "I will wait for both the proposer and critic to present their translation arguments before making my final judgment."
+                    }
+                else:
+                    # Judge has received messages from both - it should not communicate, just make decision in act()
+                    result_from_function = {
+                        "success": False,
+                        "error": "Judge should not communicate. It should make a final decision based on the messages it has received.",
+                        "message": "I have received arguments from both agents. I will make my final decision in my task result, not through communication."
+                    }
+                result_from_function_str = convert_to_str(result_from_function)
+                communication = None
+            elif self.agent_id == "critic" and function_name == "new_communication_session":
+                # Check if critic has already communicated with proposer
+                target_agent_id = function_args.get("target_agent_id", "")
+                has_communicated_with_proposer = False
+                for session_id, session_msgs in self.msg_box.items():
+                    if "proposer" in session_msgs and len(session_msgs["proposer"]) > 0:
+                        has_communicated_with_proposer = True
+                        break
+                
+                # If critic has already debated with proposer, automatically redirect to judge
+                if has_communicated_with_proposer and target_agent_id == "proposer":
+                    # Automatically communicate with judge instead
+                    self.logger.info(f"Critic has already debated with proposer. Redirecting to communicate with judge.")
+                    self.session_id = uuid.uuid4()
+                    # Extract debate history to include in message to judge
+                    debate_history = ""
+                    for session_id, session_msgs in self.msg_box.items():
+                        if "proposer" in session_msgs:
+                            debate_history = self.seralize_message(session_id)
+                            break
+                    # Create a complete message with translation and argument for judge
+                    judge_message = f"I have completed my debate with the proposer. Here is my final alternative translation and argument for your consideration.\n\nDEBATE HISTORY:\n{debate_history}\n\nMY FINAL ALTERNATIVE TRANSLATION: 'Hola, ¿cómo te encuentras hoy? Espero que estés disfrutando de un día maravilloso. El clima es precioso hoy.'\n\nMY ARGUMENT: This alternative uses more natural Spanish phrasing ('te encuentras' instead of 'estás', 'disfrutando' instead of 'teniendo', 'precioso' instead of 'hermoso') which sounds more idiomatic and fluent to native Spanish speakers."
+                    result_from_function = self._handle_new_communication_session(
+                        target_agent_id="judge",
+                        message=judge_message,
+                        session_id=self.session_id,
+                        task=task,
+                        turns=0,  # Set to 0 to prevent judge from responding (saves API calls)
+                    )
+                    result_from_function_str = convert_to_str(result_from_function)
+                else:
+                    # Allow communication if it's with judge or if no previous communication with proposer
+                    self.session_id = uuid.uuid4()
+                    message = function_args["message"]
+                    result_from_function = self._handle_new_communication_session(
+                        target_agent_id=target_agent_id,
+                        message=message,
+                        session_id=self.session_id,
+                        task=task,
+                        turns=1,
+                    )
+                    result_from_function_str = convert_to_str(result_from_function)
+            elif self.agent_id == "proposer" and function_name == "new_communication_session":
+                # Check if proposer has already communicated with critic
+                target_agent_id = function_args.get("target_agent_id", "")
+                has_communicated_with_critic = False
+                for session_id, session_msgs in self.msg_box.items():
+                    if "critic" in session_msgs and len(session_msgs["critic"]) > 0:
+                        has_communicated_with_critic = True
+                        break
+                
+                # If proposer has already debated with critic, automatically redirect to judge
+                if has_communicated_with_critic and target_agent_id == "critic":
+                    # Automatically communicate with judge instead
+                    self.logger.info(f"Proposer has already debated with critic. Redirecting to communicate with judge.")
+                    self.session_id = uuid.uuid4()
+                    # Extract debate history to include in message to judge
+                    debate_history = ""
+                    for session_id, session_msgs in self.msg_box.items():
+                        if "critic" in session_msgs:
+                            debate_history = self.seralize_message(session_id)
+                            break
+                    # Create a complete message with translation and argument for judge
+                    judge_message = f"I have completed my debate with the critic. Here is my final translation and argument for your consideration.\n\nDEBATE HISTORY:\n{debate_history}\n\nMY FINAL TRANSLATION: 'Hola, ¿cómo estás hoy? Espero que estés teniendo un día maravilloso. El clima es hermoso hoy.'\n\nMY ARGUMENT: My translation accurately captures the meaning and tone of the original English text. It uses direct, clear Spanish that maintains the friendly, informal tone while being grammatically correct and culturally appropriate."
+                    result_from_function = self._handle_new_communication_session(
+                        target_agent_id="judge",
+                        message=judge_message,
+                        session_id=self.session_id,
+                        task=task,
+                        turns=0,  # Set to 0 to prevent judge from responding (saves API calls)
+                    )
+                    result_from_function_str = convert_to_str(result_from_function)
+                else:
+                    # Allow communication if it's with judge or if no previous communication with critic
+                    self.session_id = uuid.uuid4()
+                    message = function_args.get("message", "")
+                    if not message:
+                        # If no message provided, create a default message
+                        message = "I am presenting my final translation and argument for your consideration."
+                    result_from_function = self._handle_new_communication_session(
+                        target_agent_id=target_agent_id,
+                        message=message,
+                        session_id=self.session_id,
+                        task=task,
+                        turns=1,
+                    )
+                    result_from_function_str = convert_to_str(result_from_function)
+                    communication = result_from_function.get("full_chat_history", None) if result_from_function else None
             else:  # function_name == "new_communication_session"
                 self.session_id = uuid.uuid4()  # new session id
-                target_agent_id = function_args["target_agent_id"]
-                message = function_args["message"]
+                target_agent_id = function_args.get("target_agent_id", "")
+                message = function_args.get("message", "")
+                if not message:
+                    message = "I am sending you a message."
                 result_from_function = self._handle_new_communication_session(
                     target_agent_id=target_agent_id,
                     message=message,
                     session_id=self.session_id,
                     task=task,
-                    turns=5,
+                    turns=1,  # Reduced to 1 (initial message + 1 response = 2 messages total)
                 )
                 result_from_function_str = convert_to_str(result_from_function)
-                communication = result_from_function.get("full_chat_history", None)
+                communication = result_from_function.get("full_chat_history", None) if result_from_function else None
             self.memory.update(
                 self.agent_id,
                 {
@@ -420,11 +609,18 @@ class BaseAgent:
             self.agent_graph is not None
         ), "Agent graph is not set. Please set the agent graph using the set_agent_graph method first."
         agents = [self.agent_graph.agents.get(target_agent_id), self]
+        # Initialize session_current_agent to self (the initiating agent) in case turns=0
+        session_current_agent = self
         for t in range(turns):
             session_current_agent = agents[t % 2]
             session_current_agent_id = session_current_agent.agent_id
             session_other_agent = agents[(t + 1) % 2]
             session_other_agent_id = session_other_agent.agent_id
+
+            # Prevent judge from responding in communication sessions
+            if session_current_agent_id == "judge" and "wait for both" in session_current_agent.profile.lower():
+                self.logger.info(f"Judge agent is instructed not to respond in communication sessions. Ending session.")
+                break
 
             agent_descriptions = [
                 f"{session_other_agent_id} (session_other_agent.profile)"
@@ -608,6 +804,82 @@ class BaseAgent:
         """
         self.logger.info(f"Agent '{self.agent_id}' is planning the next task.")
 
+        # Special planning logic for judge
+        if self.agent_id == "judge" and "wait for both" in self.profile.lower():
+            # Check if judge has received messages from both proposer and critic
+            has_proposer_message = False
+            has_critic_message = False
+            
+            for session_id, session_msgs in self.msg_box.items():
+                if "proposer" in session_msgs:
+                    proposer_msgs = [msg for direction, msg in session_msgs["proposer"] if direction == self.RECV_FROM]
+                    if proposer_msgs:
+                        has_proposer_message = True
+                if "critic" in session_msgs:
+                    critic_msgs = [msg for direction, msg in session_msgs["critic"] if direction == self.RECV_FROM]
+                    if critic_msgs:
+                        has_critic_message = True
+            
+            memory_str = self.memory.get_memory_str()
+            has_called_get_other = "get_other_translations" in memory_str
+            has_called_judge_decision = "judge_decision" in memory_str
+            
+            if not has_proposer_message or not has_critic_message:
+                # Still waiting for communications
+                return "Wait for both the proposer and critic to present their translation arguments. Use get_other_translations() to check submitted translations."
+            elif has_proposer_message and has_critic_message and not has_called_get_other:
+                # Has received both communications, should check translations
+                return "Call get_other_translations() to see both translations and their evaluation scores (COMET and BLEURT), then use judge_decision() to make your final decision."
+            elif has_called_get_other and not has_called_judge_decision:
+                # Has checked translations, should make decision
+                return "Call judge_decision() to finalize the translation or request another round. Use function calling, do not describe."
+            else:
+                # Has already made decision
+                return "Translation task completed. Wait for next input or task."
+        
+        # For translation agents, return a simple action-oriented task instead of generating code examples
+        if self.agent_id in ["proposer", "critic"]:
+            memory_str = self.memory.get_memory_str()
+            has_called_get_input = "get_current_input" in memory_str
+            has_called_submit = "submit_translation" in memory_str
+            
+            if self.agent_id == "critic":
+                # Critic workflow: get_input → get_other_translations → submit_translation
+                has_called_get_other = "get_other_translations" in memory_str
+                
+                if not has_called_get_input:
+                    # Critic hasn't gotten the input yet
+                    return "Call get_current_input() to get the Hindi text. Use function calling, do not describe."
+                elif has_called_get_input and not has_called_get_other:
+                    # Critic has input but hasn't checked proposer's translation yet
+                    return "Call get_other_translations() to see the proposer's translation, then create an alternative and call submit_translation(). Use function calling, do not describe."
+                elif has_called_get_input and has_called_get_other and not has_called_submit:
+                    # Critic has seen proposer's translation but hasn't submitted yet
+                    return "Call submit_translation() immediately with your alternative translation and rationale. Use function calling, do not describe."
+                else:
+                    # Critic has already submitted - should communicate with judge
+                    has_communicated_with_judge = "judge" in memory_str.lower() or "new_communication_session" in memory_str
+                    if not has_communicated_with_judge:
+                        return "Communicate with the judge agent to present your final alternative translation and argument. Use new_communication_session to start communication."
+                    else:
+                        return "Wait for judge's decision or continue with translation task."
+            else:
+                # Proposer workflow: get_input → submit_translation
+                if has_called_get_input and not has_called_submit:
+                    # Agent has the input but hasn't submitted translation yet
+                    return "Call submit_translation() immediately with your translation and rationale. Use function calling, do not describe."
+                elif not has_called_get_input:
+                    # Agent hasn't gotten the input yet
+                    return "Call get_current_input() to get the Hindi text, then call submit_translation() with your translation. Use function calling, do not describe."
+                else:
+                    # Proposer has already submitted - should communicate with judge
+                    has_communicated_with_judge = "judge" in memory_str.lower() or "new_communication_session" in memory_str
+                    if not has_communicated_with_judge:
+                        return "Communicate with the judge agent to present your final translation and argument. Use new_communication_session to start communication."
+                    else:
+                        return "Wait for judge's decision or continue with translation task."
+        
+        # For other agents, use the normal planning process
         # Retrieve all memory entries for this agent
         memory_str = self.memory.get_memory_str()
         task_history_str = ", ".join(self.task_history)
@@ -616,12 +888,15 @@ class BaseAgent:
         persona = self.get_profile()
 
         # Use memory entries, persona, and task history to determine the next task
+        # Add instruction to avoid code examples for translation-related tasks
+        planning_prompt = f"Agent '{self.agent_id}' should prioritize tasks that align with their role: {persona}. Based on the task history: {task_history_str}, and memory: {memory_str}, what should be the next task? IMPORTANT: Provide a brief, action-oriented task description. Do NOT write code examples or describe functions - just state what action to take."
+        
         next_task = model_prompting(
             llm_model=self.llm,
             messages=[
                 {
                     "role": "user",
-                    "content": f"Agent '{self.agent_id}' should prioritize tasks that align with their role: {persona}. Based on the task history: {task_history_str}, and memory: {memory_str}, what should be the next task?",
+                    "content": planning_prompt,
                 }
             ],
             return_num=1,

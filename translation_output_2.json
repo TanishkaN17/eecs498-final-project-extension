@@ -1,0 +1,29 @@
+[
+  {
+    "task": "Translate Hindi text to English. Use the translation environment functions to get the current input text, submit your translations, and work with other agents through debate. The judge will make the final decision on each translation.",
+    "final_translation": null,
+    "judge_decision": null,
+    "agent_translations": {},
+    "presentations_to_judge": {
+      "proposer": [],
+      "critic": []
+    },
+    "translations": {},
+    "final_translations": {},
+    "input_texts": [
+      {
+        "id": "input_0",
+        "text": "बाल बहुत लंबे हैं"
+      }
+    ],
+    "evaluation_metrics": {
+      "planning_scores": [],
+      "communication_scores": [],
+      "token_usage": 0,
+      "agent_kpis": {},
+      "total_milestones": 0,
+      "task_completion": [],
+      "token_consumption": []
+    }
+  }
+]

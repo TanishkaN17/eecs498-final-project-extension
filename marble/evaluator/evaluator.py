@@ -38,10 +38,12 @@ class Evaluator:
             "agent_kpis": {},
             "code_quality": {}
         }
-        with open('evaluator/evaluator_prompts.json', 'r', encoding='utf-8') as f:
+        evaluator_dir = os.path.dirname(os.path.abspath(__file__))
+        prompts_path = os.path.join(evaluator_dir, 'evaluator_prompts.json')
+        with open(prompts_path, 'r', encoding='utf-8') as f:
             self.evaluation_prompts = json.load(f)
 
-        evaluate_llm_config = self.metrics_config.get('evaluate_llm', {})
+        evaluate_llm_config = self.metrics_config.get('evaluate_llm', {}) if self.metrics_config and isinstance(self.metrics_config, dict) else {}
         self.llm = evaluate_llm_config.get('model', 'gpt-3.5-turbo') if isinstance(evaluate_llm_config, dict) else evaluate_llm_config
 
 
@@ -72,25 +74,39 @@ class Evaluator:
             task (str): The task description.
             communications (str): The communication logs between agents.
         """
-        # Get the communication prompt
-        communication_prompt_template = self.evaluation_prompts["Graph"]["Communication"]["prompt"]
-        # Fill in the placeholders {task} and {communications}
-        prompt = communication_prompt_template.format(task=task, communications=communications)
-        # Call the language model
-        result = model_prompting(
-            llm_model=self.llm,
-            messages=[{"role": "user", "content": prompt}],
-            return_num=1,
-            max_token_num=512,
-            temperature=0.0,
-            top_p=None,
-            stream=None,
-        )[0]
-        # Parse the score from result.content
-        assert isinstance(result.content, str)
-        score = self.parse_score(result.content)
-        # Update the metric
-        self.metrics["communication_score"].append(score)
+        try:
+            # Get the communication prompt
+            communication_prompt_template = self.evaluation_prompts["Graph"]["Communication"]["prompt"]
+            # Fill in the placeholders {task} and {communications}
+            prompt = communication_prompt_template.format(task=task, communications=communications)
+            # Call the language model
+            result_list = model_prompting(
+                llm_model=self.llm,
+                messages=[{"role": "user", "content": prompt}],
+                return_num=1,
+                max_token_num=512,
+                temperature=0.0,
+                top_p=None,
+                stream=None,
+            )
+            # Check if result is None (API failure)
+            if result_list is None or len(result_list) == 0:
+                self.logger.warning("Communication evaluation failed: API call returned None or empty result. Using default score -1.")
+                self.metrics["communication_score"].append(-1)
+                return
+            
+            result = result_list[0]
+            # Parse the score from result.content
+            if result and hasattr(result, 'content') and isinstance(result.content, str):
+                score = self.parse_score(result.content)
+                # Update the metric
+                self.metrics["communication_score"].append(score)
+            else:
+                self.logger.warning("Communication evaluation failed: Invalid result format. Using default score -1.")
+                self.metrics["communication_score"].append(-1)
+        except Exception as e:
+            self.logger.error(f"Communication evaluation failed with error: {e}. Using default score -1.")
+            self.metrics["communication_score"].append(-1)
 
     def evaluate_planning(self, summary: str, agent_profiles: str, agent_tasks: str, results: str) -> None:
         """
@@ -102,30 +118,44 @@ class Evaluator:
             agent_tasks (str): Tasks assigned to agents.
             results (str): Results of the next round.
         """
-        # Get the planning prompt
-        planning_prompt_template = self.evaluation_prompts["Graph"]["Planning"]["prompt"]
-        # Fill in the placeholders
-        prompt = planning_prompt_template.format(
-            summary=summary,
-            agent_profiles=agent_profiles,
-            agent_tasks=agent_tasks,
-            results=results
-        )
-        # Call the language model
-        result = model_prompting(
-            llm_model=self.llm,
-            messages=[{"role": "user", "content": prompt}],
-            return_num=1,
-            max_token_num=512,
-            temperature=0.0,
-            top_p=None,
-            stream=None,
-        )[0]
-        # Parse the score from result.content
-        assert isinstance(result.content, str)
-        score = self.parse_score(result.content)
-        # Update the metric
-        self.metrics["planning_score"].append(score)
+        try:
+            # Get the planning prompt
+            planning_prompt_template = self.evaluation_prompts["Graph"]["Planning"]["prompt"]
+            # Fill in the placeholders
+            prompt = planning_prompt_template.format(
+                summary=summary,
+                agent_profiles=agent_profiles,
+                agent_tasks=agent_tasks,
+                results=results
+            )
+            # Call the language model
+            result_list = model_prompting(
+                llm_model=self.llm,
+                messages=[{"role": "user", "content": prompt}],
+                return_num=1,
+                max_token_num=512,
+                temperature=0.0,
+                top_p=None,
+                stream=None,
+            )
+            # Check if result is None (API failure)
+            if result_list is None or len(result_list) == 0:
+                self.logger.warning("Planning evaluation failed: API call returned None or empty result. Using default score -1.")
+                self.metrics["planning_score"].append(-1)
+                return
+            
+            result = result_list[0]
+            # Parse the score from result.content
+            if result and hasattr(result, 'content') and isinstance(result.content, str):
+                score = self.parse_score(result.content)
+                # Update the metric
+                self.metrics["planning_score"].append(score)
+            else:
+                self.logger.warning("Planning evaluation failed: Invalid result format. Using default score -1.")
+                self.metrics["planning_score"].append(-1)
+        except Exception as e:
+            self.logger.error(f"Planning evaluation failed with error: {e}. Using default score -1.")
+            self.metrics["planning_score"].append(-1)
 
     def evaluate_kpi(self, task: str, agent_results: str) -> None:
         """
@@ -321,11 +351,11 @@ class Evaluator:
                 # Ensure ratings are integers
                 ratings_dict: Dict[str, int] = {k: int(v) for k, v in ratings.items()}
                 return ratings_dict
-            except json.JSONDecodeError:
-                self.logger.error("Failed to parse JSON from assistant's answer.")
+            else:
+                self.logger.error("No JSON found in assistant's answer.")
                 return {}
-        else:
-            self.logger.error("No JSON found in assistant's answer.")
+        except json.JSONDecodeError:
+            self.logger.error("Failed to parse JSON from assistant's answer.")
             return {}
 
     def parse_score(self, assistant_answer: str) -> int:
