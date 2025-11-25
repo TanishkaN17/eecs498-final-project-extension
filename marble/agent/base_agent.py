@@ -256,20 +256,33 @@ class BaseAgent:
                         has_critic_message = True
                         critic_messages.extend(critic_msgs)
             
-            if not (has_proposer_message and has_critic_message):
+            # Also check if both proposer and critic have submitted translations
+            # This is a fallback if presentations are incomplete
+            has_both_translations = False
+            if hasattr(self.env, 'translations') and isinstance(self.env.translations, dict):
+                translations = self.env.translations
+                has_proposer_translation = "proposer" in translations and len(translations.get("proposer", [])) > 0
+                has_critic_translation = "critic" in translations and len(translations.get("critic", [])) > 0
+                has_both_translations = has_proposer_translation and has_critic_translation
+            
+            # Judge can proceed if either:
+            # 1. Has received messages from both agents, OR
+            # 2. Both agents have submitted translations (fallback if presentations incomplete)
+            if not (has_proposer_message and has_critic_message) and not has_both_translations:
                 # Judge hasn't received messages from both agents yet - return waiting message without API call
                 result = type('Message', (), {
-                    'content': f"I am waiting for both the proposer and critic to present their translation arguments before making my final judgment. I have not yet received arguments from both agents.",
+                    'content': f"I am waiting for both the proposer and critic to submit their translations and present their arguments before making my final judgment. I have not yet received complete submissions from both agents.",
                     'tool_calls': None
                 })()
             else:
-                # Judge has received messages from both - make final decision using API
+                # Judge can make a decision - enhance the prompt to ensure it calls judge_decision() function
                 # Include the messages in the prompt so judge can evaluate them
-                proposer_content = "\n".join(proposer_messages) if proposer_messages else "No messages from proposer"
-                critic_content = "\n".join(critic_messages) if critic_messages else "No messages from critic"
+                proposer_content = "\n".join(proposer_messages) if proposer_messages else "No presentation received from proposer, but translation has been submitted."
+                critic_content = "\n".join(critic_messages) if critic_messages else "No presentation received from critic, but translation has been submitted."
                 
-                decision_prompt = f"{act_task}\n\nI have received the following arguments:\n\nPROPOSER'S ARGUMENT:\n{proposer_content}\n\nCRITIC'S ARGUMENT:\n{critic_content}\n\nBased on both arguments, make your final judgment. Output the best translation (either choose one or create a hybrid/improved version) with a brief explanation of your decision. IMPORTANT: Do NOT call any communication functions. Just output your final decision as text."
+                decision_prompt = f"{act_task}\n\nI have received the following:\n\nPROPOSER'S ARGUMENT:\n{proposer_content}\n\nCRITIC'S ARGUMENT:\n{critic_content}\n\nCRITICAL: You MUST call the judge_decision() function to make your final decision. Do NOT just output text. Use judge_decision() with:\n- decision='finalize' if the translations are good\n- final_translation='[your chosen translation]' (can be one of the proposals or a hybrid/improved version)\n- reasoning='[explanation of your decision]'\n\nYou can see both translations by calling get_other_translations() first if needed."
                 
+                # Use normal tool calling so judge can call judge_decision() function
                 result = model_prompting(
                     llm_model=self.llm,
                     messages=[{"role": "user", "content": decision_prompt}],
@@ -278,6 +291,8 @@ class BaseAgent:
                     temperature=0.3,
                     top_p=None,
                     stream=None,
+                    tools=tools,
+                    tool_choice="auto",  # Allow function calling
                 )[0]
         elif len(tools) == 0:
             result = model_prompting(

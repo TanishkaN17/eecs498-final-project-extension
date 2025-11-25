@@ -1257,9 +1257,11 @@ class Engine:
                                     summary = iteration.get("summary", "")
                                     if "final_translation" in summary.lower():
                                         # Extract from JSON in summary
-                                        json_match = re.search(r'"final_translation":\s*"([^"]+)"', summary)
+                                        json_match = re.search(r'"final_translation":\s*"((?:[^"\\]|\\.)*)"', summary)
                                         if json_match:
-                                            final_output["final_translation"] = json_match.group(1)
+                                            extracted = json_match.group(1)
+                                            if self._is_valid_translation(extracted):
+                                                final_output["final_translation"] = extracted
                 
                 # Also check communications for judge's final decision
                 communications = iteration.get("communications", [])
@@ -1305,10 +1307,14 @@ class Engine:
                 summary = iteration.get("summary", "")
                 if summary:
                     # Try to extract final_translation from JSON in summary
-                    json_match = re.search(r'"final_translation":\s*"([^"]+)"', summary)
+                    # Use non-greedy matching and validate the result
+                    json_match = re.search(r'"final_translation":\s*"((?:[^"\\]|\\.)*)"', summary)
                     if json_match:
-                        final_output["final_translation"] = json_match.group(1)
-                        break
+                        extracted = json_match.group(1)
+                        # Validate: reject obviously malformed translations
+                        if self._is_valid_translation(extracted):
+                            final_output["final_translation"] = extracted
+                            break
         
         # Also check the top-level summary if it exists (from initial task assignment)
         if not final_output["judge_decision"]:
@@ -1320,11 +1326,50 @@ class Engine:
                     final_output["judge_decision"] = judge_match.group(1)
                 # Try to extract final translation
                 if not final_output["final_translation"]:
-                    trans_match = re.search(r'"final_translation":\s*"([^"]+)"', summary_str)
+                    trans_match = re.search(r'"final_translation":\s*"((?:[^"\\]|\\.)*)"', summary_str)
                     if trans_match:
-                        final_output["final_translation"] = trans_match.group(1)
+                        extracted = trans_match.group(1)
+                        if self._is_valid_translation(extracted):
+                            final_output["final_translation"] = extracted
         
         return final_output
+    
+    def _is_valid_translation(self, text: str) -> bool:
+        """
+        Validate that a string is a reasonable translation, not a fragment or malformed text.
+        
+        Args:
+            text: The text to validate
+            
+        Returns:
+            True if the text appears to be a valid translation, False otherwise
+        """
+        if not text or not isinstance(text, str):
+            return False
+        
+        text = text.strip()
+        
+        # Reject empty or very short strings
+        if len(text) < 3:
+            return False
+        
+        # Reject strings that are clearly fragments/markdown formatting
+        invalid_patterns = [
+            r'^:\s*$',  # Just a colon
+            r'^\*\*.*:\s*$',  # Markdown header ending with colon (like "**MY TRANSLATION:")
+            r'^["\']?:\s*\*\*',  # Starts with colon and markdown
+            r'^[:\s\n]+$',  # Only whitespace, colons, newlines
+        ]
+        
+        for pattern in invalid_patterns:
+            if re.match(pattern, text):
+                return False
+        
+        # Reject if it's mostly punctuation/formatting
+        if len(re.sub(r'[:\s\n*"\']', '', text)) < len(text) * 0.3:
+            return False
+        
+        return True
 
     def _write_to_jsonl(self, summary_data: Dict[str, Any]) -> None:
         """
@@ -1351,7 +1396,41 @@ class Engine:
                     env_state = self.environment.get_state()
                     # Add translation data with scores and rationales
                     final_output["translations"] = env_state.get("translations", {})
-                    final_output["final_translations"] = env_state.get("final_translations", {})
+                    env_final_translations = env_state.get("final_translations", {})
+                    final_output["final_translations"] = env_final_translations
+                    
+                    # Get input texts
+                    input_texts = [
+                        {"id": inp.get("id"), "text": inp.get("text")} 
+                        for inp in getattr(self.environment, "input_texts", [])
+                    ]
+                    final_output["input_texts"] = input_texts
+                    
+                    # Use environment's final_translations as the authoritative source
+                    # This is more reliable than text extraction since it comes from judge_decision() function
+                    env_translation = None
+                    if env_final_translations:
+                        # Try to get translation for the current/last input
+                        if input_texts and len(input_texts) > 0:
+                            current_input_id = input_texts[-1].get("id")
+                            if current_input_id and current_input_id in env_final_translations:
+                                env_translation = env_final_translations[current_input_id]
+                            else:
+                                # Fallback: use the first available translation
+                                env_translation = list(env_final_translations.values())[0]
+                        else:
+                            # No input_texts, use first translation
+                            env_translation = list(env_final_translations.values())[0]
+                    
+                    # Prefer environment translation if it's valid
+                    if env_translation and self._is_valid_translation(env_translation):
+                        final_output["final_translation"] = env_translation
+                    elif final_output.get("final_translation"):
+                        # Validate extracted translation
+                        if not self._is_valid_translation(final_output["final_translation"]):
+                            # Invalid extracted translation, clear it
+                            final_output["final_translation"] = None
+                    
                     # Format agent translations for easier access (proposer and critic)
                     agent_translations = {}
                     translations_dict = env_state.get("translations", {})
@@ -1359,11 +1438,22 @@ class Engine:
                         if agent_id in translations_dict:
                             agent_translations[agent_id] = translations_dict[agent_id]
                     final_output["agent_translations"] = agent_translations
-                    # Get input texts directly from environment
-                    final_output["input_texts"] = [
-                        {"id": inp.get("id"), "text": inp.get("text")} 
-                        for inp in getattr(self.environment, "input_texts", [])
-                    ]
+                    
+                    # Fallback: If final_translation is still None and we have submitted translations,
+                    # use the critic's translation (usually better) or proposer's as last resort
+                    if not final_output.get("final_translation") and agent_translations:
+                        # Try critic's translation first
+                        if "critic" in agent_translations and len(agent_translations["critic"]) > 0:
+                            critic_translation = agent_translations["critic"][-1].get("translation")
+                            if critic_translation and self._is_valid_translation(critic_translation):
+                                final_output["final_translation"] = critic_translation
+                                self.logger.warning(f"Using critic's translation as fallback since judge did not finalize")
+                        # Fallback to proposer's translation
+                        elif "proposer" in agent_translations and len(agent_translations["proposer"]) > 0:
+                            proposer_translation = agent_translations["proposer"][-1].get("translation")
+                            if proposer_translation and self._is_valid_translation(proposer_translation):
+                                final_output["final_translation"] = proposer_translation
+                                self.logger.warning(f"Using proposer's translation as fallback since judge did not finalize")
                 
                 # Also include evaluation metrics
                 final_output["evaluation_metrics"] = {

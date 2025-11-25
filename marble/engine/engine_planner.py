@@ -513,14 +513,21 @@ class EnginePlanner:
 
         # Anthropic requires first message to be 'user', not 'system'
         messages = [{"role": "user", "content": prompt}]
+        # Claude models don't allow both temperature and top_p - use only temperature
+        is_anthropic = "claude" in self.model.lower() or "anthropic" in self.model.lower()
         response = model_prompting(
             llm_model=self.model,
             messages=messages,
             return_num=1,
             max_token_num=256,
             temperature=0.3,
-            top_p=1.0,
+            top_p=None if is_anthropic else 1.0,  # Don't pass top_p for Claude models
         )
+        # Handle case where model_prompting returns None after all retries fail
+        if response is None or len(response) == 0:
+            self.logger.error("Failed to get response from model_prompting after all retries. Defaulting to continue=False.")
+            return False
+        
         messages_for_token = messages + [
             {"role": "assistant", "content": response[0].content}
         ]

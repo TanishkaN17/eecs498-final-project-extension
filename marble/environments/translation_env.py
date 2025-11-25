@@ -4,6 +4,7 @@ Supports Hindi to English translation with COMET and BLEURT evaluation.
 """
 
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -341,6 +342,50 @@ class TranslationEnvironment(BaseEnvironment):
             get_all_inputs_desc
         )
 
+    def _check_translation_similarity(self, translation1: str, translation2: str) -> float:
+        """
+        Check similarity between two translations using simple normalization and comparison.
+        Returns a similarity score between 0 and 1 (1 = identical).
+        
+        Args:
+            translation1: First translation
+            translation2: Second translation
+            
+        Returns:
+            Similarity score (0-1)
+        """
+        # Normalize translations: lowercase, remove punctuation, strip whitespace
+        def normalize(text: str) -> str:
+            # Remove punctuation and convert to lowercase
+            text = re.sub(r'[^\w\s]', '', text.lower().strip())
+            # Normalize whitespace
+            text = ' '.join(text.split())
+            return text
+        
+        norm1 = normalize(translation1)
+        norm2 = normalize(translation2)
+        
+        if not norm1 or not norm2:
+            return 0.0
+        
+        # If normalized versions are identical
+        if norm1 == norm2:
+            return 1.0
+        
+        # Calculate word overlap
+        words1 = set(norm1.split())
+        words2 = set(norm2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        # Jaccard similarity
+        intersection = len(words1 & words2)
+        union = len(words1 | words2)
+        similarity = intersection / union if union > 0 else 0.0
+        
+        return similarity
+    
     def _submit_translation(
         self, 
         translation: str, 
@@ -380,6 +425,41 @@ class TranslationEnvironment(BaseEnvironment):
         
         # Store translation
         agent_id = self.current_agent_id or "unknown"
+        
+        # Check if critic's translation is too similar to proposer's translation
+        if agent_id == "critic":
+            # Get proposer's translation for the same input_id and round
+            proposer_translations = self.translations.get("proposer", [])
+            for prop_trans in proposer_translations:
+                if prop_trans.get("input_id") == input_id and prop_trans.get("round") == self.current_round:
+                    proposer_text = prop_trans.get("translation", "")
+                    similarity = self._check_translation_similarity(translation, proposer_text)
+                    
+                    if similarity >= 0.95:
+                        warning_msg = (
+                            f"WARNING: Your translation is too similar to the proposer's translation "
+                            f"(similarity: {similarity:.2%}). "
+                            f"The MAD framework requires substantially different translations. "
+                            f"Please provide a translation with different word choices, phrasing, or structure. "
+                            f"Proposer: '{proposer_text}' | Your: '{translation}'"
+                        )
+                        self.logger.warning(warning_msg)
+                        return {
+                            "success": False,
+                            "error": warning_msg,
+                            "similarity": similarity,
+                            "proposer_translation": proposer_text
+                        }
+                    elif similarity >= 0.80:
+                        warning_msg = (
+                            f"WARNING: Your translation is quite similar to the proposer's translation "
+                            f"(similarity: {similarity:.2%}). "
+                            f"Consider using more different vocabulary or phrasing to provide a genuinely alternative perspective. "
+                            f"Proposer: '{proposer_text}' | Your: '{translation}'"
+                        )
+                        self.logger.warning(warning_msg)
+                        # Still allow it, but log a warning
+                    break
         
         if agent_id not in self.translations:
             self.translations[agent_id] = []

@@ -56,6 +56,13 @@ def model_prompting(
         base_url = "https://api.ohmygpt.com/v1"
     else:
         base_url = None
+    
+    # Claude models don't allow both temperature and top_p to be specified
+    # If both are provided, prefer temperature and set top_p to None
+    is_anthropic = "claude" in llm_model.lower() or "anthropic" in llm_model.lower()
+    if is_anthropic and temperature is not None and top_p is not None:
+        top_p = None  # Claude models prefer temperature over top_p
+    
     completion = litellm.completion(
         model=llm_model,
         messages=messages,
