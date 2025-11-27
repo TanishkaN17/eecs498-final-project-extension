@@ -457,6 +457,18 @@ class EnginePlanner:
         # First, check for explicit completion signals (before calling LLM to save API calls)
         results_str = str(agents_results).lower()
         
+        # Check if judge_decision was called with "finalize" - this is the most reliable indicator
+        if "judge_decision" in results_str:
+            if '"decision": "finalized"' in results_str or '"decision":"finalized"' in results_str or "'decision': 'finalized'" in results_str:
+                self.logger.info("Judge decision with 'finalize' detected. Terminating simulation.")
+                return False
+            # Also check for "decision\": \"finalize" patterns
+            if "decision" in results_str and ("finalized" in results_str or "finalize" in results_str):
+                # Make sure it's not waiting
+                if not any(indicator in results_str for indicator in ["waiting", "not yet received", "i am waiting"]):
+                    self.logger.info("Judge decision detected. Terminating simulation.")
+                    return False
+        
         # Check if judge has made a final decision (but exclude waiting messages)
         # Look for positive indicators that judge has DECIDED, not that it's waiting
         judge_final_decision_keywords = [
@@ -483,11 +495,17 @@ class EnginePlanner:
             return False
         
         # Check if task is a translation task and if a final translation has been provided
-        if "translate" in self.task.lower() and "final_translation" in results_str:
-            # Check if we have a complete translation result
+        if "translate" in self.task.lower():
+            # Check for final_translation in results - this indicates completion
             if '"final_translation"' in results_str or "'final_translation'" in results_str:
-                self.logger.info("Final translation has been determined. Terminating simulation.")
-                return False
+                # Also check that it's not just waiting/empty
+                if not any(indicator in results_str for indicator in ["waiting", "not yet received", "i am waiting", "null", "none"]):
+                    # Check if there's an actual translation value (not just the key)
+                    # Look for pattern like "final_translation": "actual text here"
+                    translation_value_pattern = r'"final_translation"\s*:\s*"([^"]{3,})"'
+                    if re.search(translation_value_pattern, results_str, re.IGNORECASE):
+                        self.logger.info("Final translation has been determined in results. Terminating simulation.")
+                        return False
         
         prompt = (
             "Based on the following agents' results, determine whether the overall task is completed.\n\n"
@@ -537,6 +555,9 @@ class EnginePlanner:
             decision = json_parse(response[0].content)
             self.logger.debug(f"Received continuation decision: {decision}")
             return decision.get("continue", False)
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse JSON decision response: {e}")
+            self.logger.error(f"Response content was: {response[0].content[:200] if response and response[0].content else 'None'}")
+            # Return False to stop simulation if we can't parse the decision
+            # This prevents infinite loops when JSON parsing fails
             return False

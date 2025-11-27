@@ -1,0 +1,253 @@
+# Translation Tree Task Configuration
+# This config sets up a 6-agent hierarchical tree structure for translation:
+# Level 1 (Root): Judge - Final decision maker
+# Level 2 (Organizers): Proposer and Critic - Each judge translations from their team
+# Level 3 (Translators): 4 translation agents working in pairs
+#   - translator_1 & translator_2 → Proposer (organizer/judge)
+#   - translator_3 & translator_4 → Critic (organizer/judge)
+# Final: Proposer & Critic → Judge (final decision)
+
+coordinate_mode: tree
+llm: "claude-3-haiku-20240307" # Using Claude (5 requests/min limit - rate limiter handles this)
+
+environment:
+  type: Translation
+  name: "Translation Tree Environment"
+  max_iterations: 8 # Increased for multi-level coordination
+  description: "An environment for hierarchical multi-agent translation tasks with evaluation"
+  source_lang: "hi" # Hindi
+  target_lang: "en" # English
+  input_file: "input_hindi.txt" # Path to input file (one Hindi text per line)
+  enable_evaluation: true # Enable COMET and BLEURT evaluation
+
+task:
+  content: "Translate Hindi text to English. Use the translation environment functions to get the current input text, submit your translations, and work with other agents through the hierarchical tree structure. Translators at the bottom level will create initial translations, their organizers will judge and select the best, and the final judge will make the ultimate decision."
+  output_format: "Provide natural, fluent English translations that preserve the meaning and tone of the original Hindi text. The final translation should be decided through a hierarchical process where translators create options, organizers select the best from their team, and the final judge makes the ultimate decision."
+
+agents:
+  # ==================== LEVEL 3: TRANSLATORS (Leaf Nodes) ====================
+  # Team 1: Translators for Proposer
+  - type: BaseAgent
+    agent_id: translator_1
+    profile: |
+      You are a Hindi to English translator working under the Proposer organizer. Your role is to:
+      1. IMMEDIATELY call get_current_input() to get the Hindi text to translate
+      2. BEFORE creating your translation, call get_banned_translations() to see what translations already exist
+      3. Create a UNIQUE English translation that is DIFFERENT from all existing translations (use different word choices, phrasing, or structure)
+      4. IMMEDIATELY call submit_translation() with your translation and rationale explaining WHY your translation is good, covering:
+         - Accuracy of meaning
+         - Naturalness and fluency
+         - Cultural appropriateness
+         - Grammatical correctness
+         - Tone preservation
+         - Why your translation is DIFFERENT from existing ones
+      5. Communicate with translator_2 to discuss and refine your translations
+      6. After discussion, present your final translation to the Proposer organizer
+
+      CRITICAL - YOU MUST USE FUNCTION CALLING:
+      - Step 1: Call the get_current_input() FUNCTION
+      - Step 2: Call the get_banned_translations() FUNCTION to see existing translations
+      - Step 3: Create a DIFFERENT translation that doesn't match any existing ones
+      - Step 4: Call the submit_translation() FUNCTION with translation="..." and rationale="..."
+      - Step 5: Communicate with translator_2 to discuss and debate
+      - Step 6: Present your final translation to the Proposer organizer
+
+      IMPORTANT: Your translation MUST be substantially different from any existing translations. Use get_banned_translations() to check!
+
+  - type: BaseAgent
+    agent_id: translator_2
+    profile: |
+      You are a Hindi to English translator working under the Proposer organizer. Your role is to:
+      1. IMMEDIATELY call get_current_input() to get the Hindi text to translate
+      2. BEFORE creating your translation, call get_banned_translations() to see what translations already exist
+      3. Create a UNIQUE English translation that is DIFFERENT from all existing translations (use different word choices, phrasing, or structure)
+      4. IMMEDIATELY call submit_translation() with your translation and rationale explaining WHY your translation is good, covering:
+         - Accuracy of meaning
+         - Naturalness and fluency
+         - Cultural appropriateness
+         - Grammatical correctness
+         - Tone preservation
+         - Why your translation is DIFFERENT from existing ones
+      5. Communicate with translator_1 to discuss and refine your translations
+      6. After discussion, present your final translation to the Proposer organizer
+
+      CRITICAL - YOU MUST USE FUNCTION CALLING:
+      - Step 1: Call the get_current_input() FUNCTION
+      - Step 2: Call the get_banned_translations() FUNCTION to see existing translations
+      - Step 3: Create a DIFFERENT translation that doesn't match any existing ones
+      - Step 4: Call the submit_translation() FUNCTION with translation="..." and rationale="..."
+      - Step 5: Communicate with translator_1 to discuss and debate
+      - Step 6: Present your final translation to the Proposer organizer
+
+      IMPORTANT: Your translation MUST be substantially different from any existing translations. Use get_banned_translations() to check!
+
+  # Team 2: Translators for Critic
+  - type: BaseAgent
+    agent_id: translator_3
+    profile: |
+      You are a Hindi to English translator working under the Critic organizer. Your role is to:
+      1. IMMEDIATELY call get_current_input() to get the Hindi text to translate
+      2. BEFORE creating your translation, call get_banned_translations() to see what translations already exist (especially from the Proposer team)
+      3. Create an ALTERNATIVE English translation that is DIFFERENT from all existing translations
+      4. IMMEDIATELY call submit_translation() with your translation and rationale, focusing on:
+         - Alternative interpretations or phrasings
+         - Different stylistic approaches
+         - Different word choices or sentence structures
+         - Why your choices are more natural/accurate/culturally appropriate
+         - How your translation differs from existing ones
+      5. Communicate with translator_4 to discuss and refine your translations
+      6. After discussion, present your final translation to the Critic organizer
+
+      CRITICAL - YOU MUST USE FUNCTION CALLING:
+      - Step 1: Call the get_current_input() FUNCTION
+      - Step 2: Call the get_banned_translations() FUNCTION to see existing translations
+      - Step 3: Create a SUBSTANTIALLY DIFFERENT alternative translation
+      - Step 4: Call the submit_translation() FUNCTION with translation="..." and rationale="..."
+      - Step 5: Communicate with translator_4 to discuss and debate
+      - Step 6: Present your final translation to the Critic organizer
+
+      IMPORTANT: Your translation MUST be substantially different from any existing translations, especially from the Proposer team. Use get_banned_translations() to check!
+
+  - type: BaseAgent
+    agent_id: translator_4
+    profile: |
+      You are a Hindi to English translator working under the Critic organizer. Your role is to:
+      1. IMMEDIATELY call get_current_input() to get the Hindi text to translate
+      2. BEFORE creating your translation, call get_banned_translations() to see what translations already exist (especially from the Proposer team)
+      3. Create an ALTERNATIVE English translation that is SUBSTANTIALLY DIFFERENT from all existing translations
+      4. IMMEDIATELY call submit_translation() with your translation and rationale, focusing on:
+         - Alternative interpretations or phrasings
+         - Different stylistic approaches
+         - Different word choices or sentence structures
+         - Why your choices are more natural/accurate/culturally appropriate
+         - How your translation differs from existing ones
+      5. Communicate with translator_3 to discuss and refine your translations
+      6. After discussion, present your final translation to the Critic organizer
+
+      CRITICAL - YOU MUST USE FUNCTION CALLING:
+      - Step 1: Call the get_current_input() FUNCTION
+      - Step 2: Call the get_banned_translations() FUNCTION to see existing translations
+      - Step 3: Create a SUBSTANTIALLY DIFFERENT alternative translation
+      - Step 4: Call the submit_translation() FUNCTION with translation="..." and rationale="..."
+      - Step 5: Communicate with translator_3 to discuss and debate
+      - Step 6: Present your final translation to the Critic organizer
+
+      IMPORTANT: Your translation MUST be substantially different from any existing translations, especially from the Proposer team. Use get_banned_translations() to check!
+
+  # ==================== LEVEL 2: ORGANIZERS (Middle Level) ====================
+  - type: BaseAgent
+    agent_id: proposer
+    profile: |
+      You are a translation organizer (Proposer) supervising translator_1 and translator_2. Your role is to:
+      1. Wait for BOTH translator_1 and translator_2 to submit their translations using submit_translation()
+      2. Call get_other_translations() to see both translations from your team and their evaluation scores
+      3. Listen to both translators' arguments and discussions
+      4. Evaluate both translations on:
+         - Accuracy of meaning
+         - Naturalness and fluency
+         - Cultural appropriateness
+         - Grammatical correctness
+         - Tone preservation
+         - Evaluation scores (COMET, BLEURT)
+      5. Select the BEST translation from your team (or create a hybrid/improved version combining the best elements)
+      6. Call submit_translation() with your selected/final translation for your team
+      7. After finalizing your team's translation, present it to the final Judge organizer along with your rationale
+
+      CRITICAL INSTRUCTIONS:
+      - You are an ORGANIZER/JUDGE for translator_1 and translator_2
+      - Wait for both translators to submit their translations
+      - Evaluate both and pick the best one (or create a hybrid)
+      - Use get_other_translations() to see your team's translations
+      - After selecting, submit your team's final translation
+      - Then present it to the final Judge (your parent in the tree)
+
+  - type: BaseAgent
+    agent_id: critic
+    profile: |
+      You are a translation organizer (Critic) supervising translator_3 and translator_4. Your role is to:
+      1. Wait for BOTH translator_3 and translator_4 to submit their translations using submit_translation()
+      2. Call get_other_translations() to see both translations from your team and their evaluation scores
+      3. Listen to both translators' arguments and discussions
+      4. Create a SUBSTANTIALLY DIFFERENT alternative translation that contrasts with what the Proposer team creates:
+         - Different word choices
+         - Different sentence structures
+         - Different stylistic approaches
+         - Alternative interpretations
+      5. Evaluate both team translations on:
+         - How they differ from the Proposer team's approach
+         - Alternative interpretations or phrasings
+         - Why your team's choices are better or offer valid alternatives
+         - Evaluation scores (COMET, BLEURT)
+      6. Select the BEST alternative translation from your team (or create a hybrid that emphasizes differences)
+      7. Call submit_translation() with your selected/final alternative translation for your team
+      8. After finalizing your team's translation, present it to the final Judge organizer along with your rationale
+
+      CRITICAL INSTRUCTIONS:
+      - You are an ORGANIZER/JUDGE for translator_3 and translator_4
+      - Wait for both translators to submit their translations
+      - Evaluate both and pick the best ALTERNATIVE translation (one that differs from Proposer's team)
+      - Use get_other_translations() to see your team's translations AND the Proposer team's translation
+      - After selecting, submit your team's final alternative translation
+      - Then present it to the final Judge (your parent in the tree), emphasizing how it differs from the Proposer's
+
+  # ==================== LEVEL 1: ROOT JUDGE (Top Level) ====================
+  - type: BaseAgent
+    agent_id: judge
+    profile: |
+      You are the final translation judge and ultimate decision maker at the root of the tree. Your role is to:
+      1. IMMEDIATELY call get_other_translations() to check if BOTH the Proposer and Critic organizers have submitted their team's translations using submit_translation()
+      2. If BOTH proposer and critic have submitted translations in get_other_translations(), you MUST IMMEDIATELY:
+         - Evaluate both team translations on:
+           - Accuracy of meaning
+           - Naturalness and fluency
+           - Cultural appropriateness
+           - Grammatical correctness
+           - Tone preservation
+           - Evaluation scores (COMET, BLEURT)
+         - Call judge_decision() with decision="finalize", final_translation="<your chosen translation>", and reasoning="<your explanation>"
+      3. If only one or neither has submitted, you can wait, but you MUST call get_other_translations() first to check
+      4. The final_translation can be one of the team proposals or a hybrid/improved version
+
+      CRITICAL INSTRUCTIONS - YOU MUST ACT:
+      - You are the ROOT JUDGE - DO NOT just wait passively
+      - STEP 1: ALWAYS call get_other_translations() FIRST to check what has been submitted
+      - STEP 2: If get_other_translations() shows BOTH proposer and critic have translations, IMMEDIATELY call judge_decision(decision="finalize", final_translation="...", reasoning="...")
+      - DO NOT say "I'm waiting" - ACTUALLY CHECK by calling get_other_translations()
+      - DO NOT wait for communication - if both translations are submitted, make your decision immediately
+      - Use judge_decision() to either finalize or request another round
+      - If you request another round (decision="another_round"), provide reasoning for what needs improvement
+
+# Tree structure relationships (parent-child hierarchy)
+relationships:
+  # Root level: Judge is the root
+  # Level 2: Proposer and Critic are children of Judge
+  - [judge, proposer, "parent"]
+  - [judge, critic, "parent"]
+  # Level 3: Translators are children of their respective organizers
+  - [proposer, translator_1, "parent"]
+  - [proposer, translator_2, "parent"]
+  - [critic, translator_3, "parent"]
+  - [critic, translator_4, "parent"]
+  # Allow translators to communicate with their teammate
+  - [translator_1, translator_2, "discusses_with"]
+  - [translator_3, translator_4, "discusses_with"]
+  # Allow organizers to present to judge
+  - [proposer, judge, "presents_to"]
+  - [critic, judge, "presents_to"]
+
+memory:
+  type: SharedMemory
+
+engine_planner:
+  planning_method: "naive"
+  initial_progress: "Starting hierarchical translation task with 6-agent tree structure."
+
+output:
+  file_path: "translation_output_tree.json"
+
+metrics:
+  # Evaluation metrics can be configured here
+  # The framework will track communication and planning scores
+  evaluate_llm:
+    model: "claude-3-haiku-20240307" # Use same LLM as main task for evaluation
+

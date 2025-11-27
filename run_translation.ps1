@@ -5,7 +5,7 @@ Write-Host "MARBLE Translation Task Runner"
 Write-Host "=========================================="
 
 # Check if config file exists
-$CONFIG_FILE = "marble\configs\translation_config.yaml"
+$CONFIG_FILE = "marble\configs\translation_config_tree.yaml"
 
 if (-not (Test-Path $CONFIG_FILE)) {
     Write-Host "Error: Config file not found at $CONFIG_FILE"
@@ -94,4 +94,3 @@ Write-Host "=========================================="
 Write-Host "Translation task completed!"
 Write-Host "Check translation_output.jsonl for results"
 Write-Host "=========================================="
-

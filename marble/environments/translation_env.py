@@ -242,7 +242,34 @@ class TranslationEnvironment(BaseEnvironment):
             submit_translation_desc
         )
         
-        # Action 2: Get other translations
+        # Action 2: Get banned translations (to avoid duplicates)
+        get_banned_translations_desc = {
+            "type": "function",
+            "function": {
+                "name": "get_banned_translations",
+                "description": "Get ALL translations that have already been submitted by ANY agent (including yourself). Use this BEFORE submitting to ensure your translation is DIFFERENT. You MUST create a unique translation that differs from all banned translations.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "input_id": {
+                            "type": "string",
+                            "description": "ID of the input text (optional)"
+                        },
+                        "round": {
+                            "type": "integer",
+                            "description": "Round number (optional, defaults to current round)"
+                        }
+                    }
+                }
+            }
+        }
+        self.register_action(
+            "get_banned_translations",
+            self._get_banned_translations,
+            get_banned_translations_desc
+        )
+        
+        # Action 2b: Get other translations
         get_translations_desc = {
             "type": "function",
             "function": {
@@ -426,9 +453,45 @@ class TranslationEnvironment(BaseEnvironment):
         # Store translation
         agent_id = self.current_agent_id or "unknown"
         
-        # Check if critic's translation is too similar to proposer's translation
+        # Check for duplicate translations against ALL existing translations
+        # This prevents translators from submitting the same translation
+        for existing_agent_id, existing_translations in self.translations.items():
+            for existing_trans in existing_translations:
+                if (existing_trans.get("input_id") == input_id and 
+                    existing_trans.get("round") == self.current_round):
+                    existing_text = existing_trans.get("translation", "")
+                    similarity = self._check_translation_similarity(translation, existing_text)
+                    
+                    # Reject if translation is too similar (>= 95% similarity)
+                    if similarity >= 0.95:
+                        warning_msg = (
+                            f"ERROR: Your translation is too similar (similarity: {similarity:.2%}) to a translation "
+                            f"already submitted by {existing_agent_id}. "
+                            f"Translation already submitted: '{existing_text}'. "
+                            f"Your translation: '{translation}'. "
+                            f"You MUST create a DIFFERENT translation. Use get_banned_translations() to see all existing translations."
+                        )
+                        self.logger.warning(warning_msg)
+                        return {
+                            "success": False,
+                            "error": warning_msg,
+                            "similarity": similarity,
+                            "existing_translation": existing_text,
+                            "existing_agent_id": existing_agent_id,
+                            "suggestion": "Call get_banned_translations() to see all existing translations and create a unique one."
+                        }
+                    elif similarity >= 0.80:
+                        warning_msg = (
+                            f"WARNING: Your translation is quite similar (similarity: {similarity:.2%}) to a translation "
+                            f"already submitted by {existing_agent_id}. "
+                            f"Consider using more different vocabulary or phrasing. "
+                            f"Existing: '{existing_text}' | Your: '{translation}'"
+                        )
+                        self.logger.warning(warning_msg)
+                        # Continue checking other translations - don't break here
+        
+        # Special check for critic: ensure it differs substantially from proposer
         if agent_id == "critic":
-            # Get proposer's translation for the same input_id and round
             proposer_translations = self.translations.get("proposer", [])
             for prop_trans in proposer_translations:
                 if prop_trans.get("input_id") == input_id and prop_trans.get("round") == self.current_round:
@@ -437,10 +500,9 @@ class TranslationEnvironment(BaseEnvironment):
                     
                     if similarity >= 0.95:
                         warning_msg = (
-                            f"WARNING: Your translation is too similar to the proposer's translation "
+                            f"ERROR: As the Critic, your translation must be SUBSTANTIALLY DIFFERENT from the proposer's translation "
                             f"(similarity: {similarity:.2%}). "
-                            f"The MAD framework requires substantially different translations. "
-                            f"Please provide a translation with different word choices, phrasing, or structure. "
+                            f"The MAD framework requires different perspectives. "
                             f"Proposer: '{proposer_text}' | Your: '{translation}'"
                         )
                         self.logger.warning(warning_msg)
@@ -448,17 +510,9 @@ class TranslationEnvironment(BaseEnvironment):
                             "success": False,
                             "error": warning_msg,
                             "similarity": similarity,
-                            "proposer_translation": proposer_text
+                            "proposer_translation": proposer_text,
+                            "suggestion": "As the Critic, you must provide a genuinely alternative translation with different word choices, sentence structure, or interpretation."
                         }
-                    elif similarity >= 0.80:
-                        warning_msg = (
-                            f"WARNING: Your translation is quite similar to the proposer's translation "
-                            f"(similarity: {similarity:.2%}). "
-                            f"Consider using more different vocabulary or phrasing to provide a genuinely alternative perspective. "
-                            f"Proposer: '{proposer_text}' | Your: '{translation}'"
-                        )
-                        self.logger.warning(warning_msg)
-                        # Still allow it, but log a warning
                     break
         
         if agent_id not in self.translations:
@@ -500,6 +554,50 @@ class TranslationEnvironment(BaseEnvironment):
             "input_id": input_id,
             "round": self.current_round,
             "evaluation": translation_entry["evaluation"]
+        }
+
+    def _get_banned_translations(
+        self,
+        input_id: Optional[str] = None,
+        round: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get all translations that have already been submitted (banned list).
+        This helps translators avoid submitting duplicate translations.
+        """
+        if round is None:
+            round = self.current_round
+        
+        if not input_id:
+            if self.current_input_index < len(self.input_texts):
+                input_id = self.input_texts[self.current_input_index]["id"]
+            else:
+                return {
+                    "success": False,
+                    "error": "No input text available"
+                }
+        
+        current_agent = self.current_agent_id or "unknown"
+        banned_translations = []
+        
+        # Get ALL translations for this input and round (including from other agents)
+        for agent_id, translations in self.translations.items():
+            for trans in translations:
+                if trans["input_id"] == input_id and trans["round"] == round:
+                    banned_translations.append({
+                        "agent_id": agent_id,
+                        "translation": trans["translation"],
+                        "rationale": trans.get("rationale", ""),
+                        "evaluation": trans.get("evaluation", {})
+                    })
+        
+        return {
+            "success": True,
+            "banned_translations": banned_translations,
+            "count": len(banned_translations),
+            "input_id": input_id,
+            "round": round,
+            "message": f"Found {len(banned_translations)} translation(s) already submitted. You MUST create a DIFFERENT translation."
         }
 
     def _get_other_translations(

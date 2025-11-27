@@ -906,6 +906,110 @@ class Engine:
                 )
                 self.evaluator.evaluate_kpi(self.task, results_str)
 
+                # Check if task is complete by checking environment's final_translations (for translation tasks)
+                # This is more reliable than text parsing
+                if hasattr(self.environment, 'final_translations') and isinstance(self.environment.final_translations, dict):
+                    if len(self.environment.final_translations) > 0:
+                        self.logger.info(
+                            f"Final translation detected in environment. Final translations: {self.environment.final_translations}. Terminating simulation."
+                        )
+                        iteration_data["continue_simulation"] = False
+                        summary_data["iterations"].append(iteration_data)
+                        break
+                
+                # Check if the current iteration summary contains a final_translation (even if judge hasn't called judge_decision)
+                # Sometimes summaries show completion before the function is actually called
+                current_summary = iteration_data.get("summary", "")
+                if current_summary and isinstance(current_summary, str) and "translate" in self.task.lower():
+                    import re
+                    # Look for "final_translation": "..." pattern in summary
+                    if '"final_translation"' in current_summary.lower():
+                        translation_match = re.search(r'"final_translation"\s*:\s*"([^"]{3,})"', current_summary, re.IGNORECASE)
+                        if translation_match:  # Removed iteration >= 3 requirement
+                            extracted = translation_match.group(1).strip()
+                            # Make sure it's not just waiting/null
+                            if (extracted and extracted.lower() not in ["null", "none", ""] and
+                                not any(word in extracted.lower() for word in ["waiting", "not yet"])):
+                                self.logger.info(
+                                    f"Final translation found in iteration {self.current_iteration} summary: '{extracted}'. "
+                                    "Terminating simulation."
+                                )
+                                iteration_data["continue_simulation"] = False
+                                summary_data["iterations"].append(iteration_data)
+                                break
+                
+                # Also check the current iteration's summary for final_translation (even if judge hasn't called judge_decision)
+                # Sometimes the LLM generates summaries that include final_translation before judge actually calls the function
+                current_summary = iteration_data.get("summary", "")
+                if current_summary and isinstance(current_summary, str):
+                    summary_str_lower = current_summary.lower()
+                    # Check if summary mentions final_translation and it's not just waiting
+                    if ("final_translation" in summary_str_lower and 
+                        not any(indicator in summary_str_lower for indicator in ["waiting", "not yet", "null", "none"])):
+                        # Check if there's an actual translation value (not just the key)
+                        import re
+                        translation_match = re.search(r'"final_translation"\s*:\s*"([^"]{3,})"', current_summary, re.IGNORECASE)
+                        if translation_match:
+                            extracted_translation = translation_match.group(1).strip()
+                            self.logger.info(
+                                f"Final translation found in iteration {self.current_iteration} summary: '{extracted_translation}'. "
+                                "Terminating simulation even though judge_decision() wasn't called."
+                            )
+                            iteration_data["continue_simulation"] = False
+                            summary_data["iterations"].append(iteration_data)
+                            break
+                
+                # For translation tree mode: Check if both proposer and critic have submitted their final team translations
+                # Also check if we can infer completion from the results/summaries even if judge hasn't finalized
+                if self.coordinate_mode == "tree" and hasattr(self.environment, 'translations'):
+                    translations = self.environment.translations if isinstance(self.environment.translations, dict) else {}
+                    proposer_submitted = "proposer" in translations and len(translations.get("proposer", [])) > 0
+                    critic_submitted = "critic" in translations and len(translations.get("critic", [])) > 0
+                    
+                    # Check if both organizers have submitted their team translations
+                    if proposer_submitted and critic_submitted:
+                        # Both have submitted - check if judge has finalized
+                        has_finalized = (hasattr(self.environment, 'final_translations') and 
+                                       isinstance(self.environment.final_translations, dict) and
+                                       len(self.environment.final_translations) > 0)
+                        
+                        if not has_finalized:
+                            # Both submitted but judge hasn't finalized - check how many iterations we've had
+                            # If we're on iteration 4+ and both have submitted, stop the loop
+                            # The judge should have finalized by now
+                            if self.current_iteration >= 4:
+                                self.logger.warning(
+                                    f"Iteration {self.current_iteration}: Both proposer and critic have submitted translations, "
+                                    "but judge hasn't called judge_decision() to finalize after multiple iterations. "
+                                    "Stopping to prevent infinite loop. Final translation will be extracted from available translations."
+                                )
+                                iteration_data["continue_simulation"] = False
+                                summary_data["iterations"].append(iteration_data)
+                                break
+                    
+                    # Also check if we're on iteration 5+ - at this point, we should stop regardless
+                    # to prevent infinite loops
+                    if self.current_iteration >= 5:
+                        self.logger.warning(
+                            f"Iteration {self.current_iteration}: Reached maximum safe iteration limit. "
+                            "Stopping to prevent infinite loop. Final translation will be extracted from available data."
+                        )
+                        iteration_data["continue_simulation"] = False
+                        summary_data["iterations"].append(iteration_data)
+                        break
+                
+                # Also check if judge_decision was called with "finalize" in the results
+                results_str = str(results).lower()
+                if "judge_decision" in results_str:
+                    if ("decision\": \"finalized" in results_str or "decision\":\"finalized" in results_str or 
+                        '"decision": "finalized"' in results_str or "decision: \"finalized" in results_str):
+                        self.logger.info(
+                            "Judge decision with 'finalize' detected in results. Terminating simulation."
+                        )
+                        iteration_data["continue_simulation"] = False
+                        summary_data["iterations"].append(iteration_data)
+                        break
+                
                 # Decide whether to continue or terminate
                 continue_simulation = self.planner.decide_next_step(results)
                 iteration_data["continue_simulation"] = continue_simulation
@@ -974,6 +1078,52 @@ class Engine:
             self.logger.info("Tree-based coordination simulation completed.")
             self._write_to_jsonl(summary_data)
 
+    def _has_agent_completed_task(self, agent: BaseAgent) -> bool:
+        """
+        Check if an agent has completed its task based on its role.
+        
+        Args:
+            agent (BaseAgent): The agent to check.
+            
+        Returns:
+            bool: True if agent has completed its task, False otherwise.
+        """
+        # Check environment for submitted translations (most reliable)
+        if hasattr(self.environment, 'translations') and isinstance(self.environment.translations, dict):
+            translations = self.environment.translations
+            agent_id = agent.agent_id
+            
+            if agent_id.startswith("translator_"):
+                # Translators are complete when they've submitted a translation
+                return agent_id in translations and len(translations[agent_id]) > 0
+            
+            elif agent_id in ["proposer", "critic"]:
+                # Organizers are complete when they've submitted their team's final translation
+                return agent_id in translations and len(translations[agent_id]) > 0
+            
+            elif agent_id == "judge":
+                # Judge is complete when final_translations dictionary has entries
+                if hasattr(self.environment, 'final_translations'):
+                    return len(self.environment.final_translations) > 0
+        
+        # Fallback: check memory for function calls
+        memory_str = agent.memory.get_memory_str()
+        
+        if agent.agent_id.startswith("translator_"):
+            # Translators are complete when they've submitted a translation
+            return "submit_translation" in memory_str
+        
+        elif agent.agent_id in ["proposer", "critic"]:
+            # Organizers are complete when they've submitted their team's final translation
+            return "submit_translation" in memory_str
+        
+        elif agent.agent_id == "judge":
+            # Judge is complete when it has made a final decision
+            return "judge_decision" in memory_str
+        
+        # For other agents, always allow execution
+        return False
+
     def _execute_agent_task_recursive(self, agent: BaseAgent, task: str) -> Any:
         """
         Recursively execute tasks starting from the given agent.
@@ -985,6 +1135,17 @@ class Engine:
         Returns:
             Any: The result of the agent's execution.
         """
+        # Check if agent has already completed its task
+        if self._has_agent_completed_task(agent):
+            self.logger.info(f"Agent '{agent.agent_id}' has already completed its task. Skipping re-execution.")
+            # Return cached result if available, otherwise return a completion message
+            memory_str = agent.memory.get_memory_str()
+            cached_result = {
+                "agent_id": agent.agent_id,
+                "result": f"Agent '{agent.agent_id}' has already completed its task. Previous actions: {memory_str[:200]}"
+            }
+            return ([cached_result], None, [])
+        
         self.logger.info(f"Agent '{agent.agent_id}' is executing task.")
         tasks = []
         print(agent.children)
@@ -997,16 +1158,22 @@ class Engine:
             communications = []
             for child in agent.children:
                 child_task = tasks_for_children.get(child.agent_id, "")
-                if child_task:
-                    (
-                        child_result,
-                        communication,
-                        tasks_,
-                    ) = self._execute_agent_task_recursive(child, child_task)
-                    tasks += tasks_
-                    if communication:
-                        communications.append(communication)
-                    children_results += child_result
+                # If no specific task assigned, use parent's task as fallback
+                if not child_task:
+                    child_task = task
+                    self.logger.warning(
+                        f"No task assigned to child '{child.agent_id}', using parent's task as fallback"
+                    )
+                # Execute child with assigned or fallback task
+                (
+                    child_result,
+                    communication,
+                    tasks_,
+                ) = self._execute_agent_task_recursive(child, child_task)
+                tasks += tasks_
+                if communication:
+                    communications.append(communication)
+                children_results += child_result
             # Agent may also act itself
             results_str = "\n".join(
                 json.dumps(result)[:500] for result in children_results
@@ -1135,8 +1302,8 @@ class Engine:
         presentations_to_judge = {"proposer": [], "critic": []}
         
         for iteration in iterations:
-            communications = iteration.get("communications", [])
-            task_results = iteration.get("task_results", [])
+            communications = iteration.get("communications") or []
+            task_results = iteration.get("task_results") or []
             
             for comm in communications:
                 # Communication can be:
@@ -1192,9 +1359,64 @@ class Engine:
         
         final_output["presentations_to_judge"] = presentations_to_judge
         
-        # Try to extract from iterations
+        # FIRST: Try to extract from iteration summaries (most reliable source)
         iterations = summary_data.get("iterations", [])
         if iterations:
+            for iteration in iterations:
+                summary = iteration.get("summary", "")
+                # Handle case where summary might be a Message object
+                if hasattr(summary, 'content'):
+                    summary = summary.content
+                if summary and isinstance(summary, str):
+                    # Look for "final_translation": "..." pattern in summary JSON
+                    if '"final_translation"' in summary.lower() or "'final_translation'" in summary.lower():
+                        import re
+                        # Try multiple patterns to extract the translation
+                        # Pattern 1: Standard JSON format: "final_translation": "text" (allowing newlines with DOTALL)
+                        translation_match = re.search(r'["\']final_translation["\']\s*:\s*["\']((?:[^"\'\\]|\\.)*)["\']', summary, re.IGNORECASE | re.DOTALL)
+                        if translation_match:
+                            extracted = translation_match.group(1).strip()
+                            # Unescape any escaped characters
+                            extracted = extracted.replace('\\"', '"').replace("\\'", "'").replace('\\n', '\n').replace('\\\\', '\\')
+                            # Remove any newlines and extra whitespace
+                            extracted = ' '.join(extracted.split())
+                            if extracted and self._is_valid_translation(extracted):
+                                final_output["final_translation"] = extracted
+                                self.logger.info(f"Extracted final translation from iteration summary: '{extracted}'")
+                                break  # Found it, no need to check other sources
+                        # Pattern 2: Try without strict escaping, simpler pattern
+                        if not final_output["final_translation"]:
+                            translation_match = re.search(r'["\']final_translation["\']\s*:\s*["\']([^"\']{3,})["\']', summary, re.IGNORECASE)
+                            if translation_match:
+                                extracted = translation_match.group(1).strip()
+                                # Remove any newlines and extra whitespace
+                                extracted = ' '.join(extracted.split())
+                                if extracted and self._is_valid_translation(extracted):
+                                    final_output["final_translation"] = extracted
+                                    self.logger.info(f"Extracted final translation from iteration summary (pattern 2): '{extracted}'")
+                                    break
+                        # Pattern 3: Try to find text between quotes after final_translation (handles multiline)
+                        if not final_output["final_translation"]:
+                            # Find the position of final_translation
+                            match_start = re.search(r'["\']final_translation["\']\s*:\s*["\']', summary, re.IGNORECASE)
+                            if match_start:
+                                start_pos = match_start.end()
+                                # Find the closing quote
+                                quote_char = summary[start_pos - 1]  # Get the quote character used
+                                end_pos = summary.find(quote_char, start_pos)
+                                if end_pos > start_pos:
+                                    extracted = summary[start_pos:end_pos].strip()
+                                    # Handle escaped quotes
+                                    extracted = extracted.replace('\\' + quote_char, quote_char)
+                                    # Remove newlines and normalize whitespace
+                                    extracted = ' '.join(extracted.split())
+                                    if extracted and self._is_valid_translation(extracted):
+                                        final_output["final_translation"] = extracted
+                                        self.logger.info(f"Extracted final translation from iteration summary (pattern 3): '{extracted}'")
+                                        break
+        
+        # SECOND: Try to extract from iterations task results
+        if not final_output["final_translation"] and iterations:
             # Look through all iterations for judge's result
             for iteration in iterations:
                 task_results = iteration.get("task_results", [])
@@ -1252,19 +1474,9 @@ class Engine:
                                     translation_match = re.search(r'["\']([A-Z][^"\']{5,})["\']', judge_result)
                                     if translation_match:
                                         final_output["final_translation"] = translation_match.group(1).strip()
-                                else:
-                                    # Try to find translation in the summary
-                                    summary = iteration.get("summary", "")
-                                    if "final_translation" in summary.lower():
-                                        # Extract from JSON in summary
-                                        json_match = re.search(r'"final_translation":\s*"((?:[^"\\]|\\.)*)"', summary)
-                                        if json_match:
-                                            extracted = json_match.group(1)
-                                            if self._is_valid_translation(extracted):
-                                                final_output["final_translation"] = extracted
                 
                 # Also check communications for judge's final decision
-                communications = iteration.get("communications", [])
+                communications = iteration.get("communications") or []
                 for comm in communications:
                     if isinstance(comm, str) and "judge" in comm.lower():
                         # Exclude waiting messages
@@ -1331,6 +1543,29 @@ class Engine:
                         extracted = trans_match.group(1)
                         if self._is_valid_translation(extracted):
                             final_output["final_translation"] = extracted
+        
+        # Last resort: Extract from iteration summaries if we still don't have a translation
+        # Look through all iteration summaries for final_translation mentions
+        if not final_output["final_translation"]:
+            for iteration in iterations:
+                summary = iteration.get("summary", "")
+                if summary and "final_translation" in summary.lower():
+                    # Try multiple patterns to extract
+                    patterns = [
+                        r'"final_translation":\s*"((?:[^"\\]|\\.)*)"',  # JSON format
+                        r'final_translation["\']?\s*[:=]\s*["\']([^"\']+)["\']',  # More flexible
+                        r'final translation["\']?\s*[:=]\s*["\']([^"\']+)["\']',  # Case insensitive
+                    ]
+                    for pattern in patterns:
+                        match = re.search(pattern, summary, re.IGNORECASE)
+                        if match:
+                            extracted = match.group(1).strip()
+                            if self._is_valid_translation(extracted):
+                                final_output["final_translation"] = extracted
+                                self.logger.info(f"Extracted final translation from iteration summary: {extracted}")
+                                break
+                    if final_output["final_translation"]:
+                        break
         
         return final_output
     

@@ -490,11 +490,116 @@ class BaseAgent:
                 self.agent_id, {"type": "action_response", "result": result.content}
             )
             self.logger.info(f"Agent '{self.agent_id}' acted with result '{result}'.")
+        
+        # For translation agents, continue executing until task completion
+        # This prevents infinite loops where agents only call get_current_input() but never submit_translation()
+        if self.agent_id.startswith("translator_"):
+            max_subsequent_calls = 3  # Allow up to 3 more function calls after the first
+            iteration = 0
+            accumulated_output = ""
+            accumulated_output += (result.content if result.content else "") + "\n"
+            if result_from_function_str:
+                accumulated_output += "Result from the function:" + result_from_function_str + "\n"
+            
+            # Continue until translation is submitted
+            while iteration < max_subsequent_calls:
+                memory_str = self.memory.get_memory_str()
+                has_submitted = "submit_translation" in memory_str
+                has_input = "get_current_input" in memory_str
+                
+                if has_submitted:
+                    # Task complete
+                    break
+                
+                if not has_input:
+                    # Need to get input first - already done in first iteration
+                    break
+                
+                # Agent has input but hasn't submitted - continue execution
+                iteration += 1
+                self.logger.info(f"Agent '{self.agent_id}' continuing execution (iteration {iteration}/{max_subsequent_calls}) to complete translation submission.")
+                
+                # Create continuation prompt
+                continuation_task = (
+                    f"You have already called get_current_input() and obtained the Hindi text. "
+                    f"Now you MUST immediately call submit_translation() with your English translation and rationale. "
+                    f"This is your task: {task}\n"
+                    f"Your memory: {self.memory.get_memory_str()}\n"
+                    f"CRITICAL: You MUST call submit_translation() NOW. Do not describe what you will do - actually call the function!"
+                )
+                
+                # Make another LLM call with continuation task
+                continuation_result = model_prompting(
+                    llm_model=self.llm,
+                    messages=[{"role": "user", "content": continuation_task}],
+                    return_num=1,
+                    max_token_num=512,
+                    temperature=0.0,
+                    top_p=None,
+                    stream=None,
+                    tools=tools,
+                    tool_choice="required" if self.agent_id != "judge" else "auto",
+                )[0]
+                
+                if continuation_result.tool_calls:
+                    continuation_function_call = continuation_result.tool_calls[0]
+                    continuation_function_name = continuation_function_call.function.name
+                    continuation_function_args = json.loads(continuation_function_call.function.arguments)
+                    
+                    if continuation_function_name != "new_communication_session":
+                        continuation_result_from_function = self.env.apply_action(
+                            agent_id=self.agent_id,
+                            action_name=continuation_function_name,
+                            arguments=continuation_function_args,
+                        )
+                        continuation_result_from_function_str = convert_to_str(continuation_result_from_function)
+                        
+                        self.memory.update(
+                            self.agent_id,
+                            {
+                                "type": "action_function_call",
+                                "action_name": continuation_function_name,
+                                "args": continuation_function_args,
+                                "result": continuation_result_from_function,
+                            },
+                        )
+                        
+                        accumulated_output += continuation_result.content + "\n" if continuation_result.content else ""
+                        accumulated_output += "Result from the function:" + continuation_result_from_function_str + "\n"
+                        
+                        self.logger.info(f"Agent '{self.agent_id}' called '{continuation_function_name}' in continuation.")
+                        
+                        # If we submitted translation, we're done
+                        if continuation_function_name == "submit_translation":
+                            break
+                    else:
+                        # Communication - handle it but don't count as task completion
+                        break
+                else:
+                    # No tool call - agent might be describing instead of acting
+                    # Break to avoid infinite loop
+                    break
+        
         result_content = result.content if result.content else ""
         self.token_usage += self._calculate_token_usage(task, result_content)
-        output = "Result from the model:" + result_content + "\n"
-        if result_from_function_str:
-            output += "Result from the function:" + result_from_function_str
+        
+        # Determine final output
+        # For translators that went through continuation, use accumulated_output
+        if self.agent_id.startswith("translator_"):
+            # Check if accumulated_output was created (indicates continuation ran)
+            if 'accumulated_output' in locals():
+                output = "Result from the model:" + accumulated_output
+            else:
+                # Standard output for translators
+                output = "Result from the model:" + result_content + "\n"
+                if result_from_function_str:
+                    output += "Result from the function:" + result_from_function_str
+        else:
+            # Standard output for non-translators
+            output = "Result from the model:" + result_content + "\n"
+            if result_from_function_str:
+                output += "Result from the function:" + result_from_function_str
+        
         return output, communication
 
     def _calculate_token_usage(self, task: str, result: str) -> int:
@@ -1014,35 +1119,121 @@ class BaseAgent:
         )
         for child_id, profile in children_profiles.items():
             prompt += f"- {child_id}: {profile}\n"
-        prompt += "\nAssign specific tasks to your children agents to help accomplish the overall task. Provide the assignments in JSON format:\n\n"
-        prompt += "{\n"
-        '  "child_agent_id": "Task description",\n'
-        '  "another_child_agent_id": "Task description"\n'
-        "}\n"
+        
+        # Build example JSON with actual child IDs
+        example_json_lines = ["{"]
+        child_ids_list = list(children_profiles.keys())
+        for i, child_id in enumerate(child_ids_list):
+            comma = "," if i < len(child_ids_list) - 1 else ""
+            example_json_lines.append(f'  "{child_id}": "Task description for {child_id}"{comma}')
+        example_json_lines.append("}")
+        example_json = "\n".join(example_json_lines)
+        
+        prompt += "\nAssign specific tasks to your children agents to help accomplish the overall task. "
+        prompt += "CRITICAL: You MUST respond with ONLY valid JSON, no additional text, markdown code blocks, or explanation. "
+        prompt += "IMPORTANT: Task descriptions must be single-line strings with no line breaks. Use \\n if you need line breaks. "
+        prompt += "The JSON format must be exactly:\n\n"
+        prompt += f"{example_json}\n\n"
+        prompt += "Remember: Respond with ONLY the JSON object, nothing else. Do not wrap it in markdown or add any explanations. "
+        prompt += "Task descriptions must be single lines - do not include actual newline characters in string values."
+        # For Anthropic/Claude, the first message must have role='user', not 'system'
+        # Check if using Anthropic model
+        is_anthropic = "claude" in self.llm.lower() or "anthropic" in self.llm.lower()
+        if is_anthropic:
+            messages = [{"role": "user", "content": prompt}]
+        else:
+            messages = [{"role": "system", "content": prompt}]
+        
         response = model_prompting(
             llm_model=self.llm,
-            messages=[{"role": "system", "content": prompt}],
+            messages=messages,
             return_num=1,
             max_token_num=512,
             temperature=0.7,
             top_p=1.0,
         )[0]
-        messages = [
-            {"role": "system", "content": prompt},
-            {"role": "system", "content": response.content},
-        ]
+        
+        # Update messages for token counting
+        if is_anthropic:
+            messages = [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": response.content},
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": prompt},
+                {"role": "system", "content": response.content},
+            ]
         self.token_usage += token_counter(model=self.llm, messages=messages)
+        
+        # Try to extract JSON from response (might be wrapped in markdown code blocks)
+        response_content = response.content if response.content else ""
+        
+        # Try to extract JSON using similar logic to json_parse function
+        import re
+        # First try to find JSON in markdown code block
+        pattern = r"```(?:json)?\s*(\{.*?\})\s*```"
+        match = re.search(pattern, response_content, re.DOTALL)
+        if match:
+            json_str = match.group(1)
+        else:
+            # If no code block, try to extract JSON by finding first { and last }
+            json_start = response_content.find('{')
+            json_end = response_content.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                json_str = response_content[json_start:json_end]
+            else:
+                json_str = response_content.strip()
+        
         try:
-            tasks_for_children: Dict[str, Any] = json.loads(
-                response.content if response.content else "{}"
-            )
+            tasks_for_children: Dict[str, Any] = json.loads(json_str)
             self.logger.info(
                 f"Agent '{self.agent_id}' assigned tasks to children: {tasks_for_children}"
             )
-            return tasks_for_children
-        except json.JSONDecodeError as e:
+            
+            # Validate that we have tasks for all children
+            if tasks_for_children:
+                return tasks_for_children
+            else:
+                # If parsing succeeded but dict is empty, provide default tasks
+                self.logger.warning(f"Parsed empty dict, providing default tasks to children")
+                return self._get_default_tasks_for_children(task)
+                
+        except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse tasks for children: {e}")
-            return {}
+            self.logger.error(f"Response content was: {response_content[:500]}")
+            
+            # Try to fix common JSON issues: replace unescaped control characters
+            # Simple approach: replace literal control characters that shouldn't be in JSON strings
+            try:
+                # Replace common control characters that break JSON parsing
+                fixed_json = json_str
+                # Only replace unescaped newlines/tabs (not ones that are already escaped)
+                fixed_json = re.sub(r'(?<!\\)\n', '\\n', fixed_json)  # Unescaped newlines
+                fixed_json = re.sub(r'(?<!\\)\r', '\\r', fixed_json)  # Unescaped carriage returns
+                fixed_json = re.sub(r'(?<!\\)\t', '\\t', fixed_json)  # Unescaped tabs
+                
+                tasks_for_children: Dict[str, Any] = json.loads(fixed_json)
+                self.logger.info(f"Successfully parsed JSON after fixing control characters")
+                return tasks_for_children
+            except Exception as e2:
+                self.logger.warning(f"Could not fix JSON, using default tasks: {e2}")
+                # Provide default tasks as fallback so children can still execute
+                return self._get_default_tasks_for_children(task)
+    
+    def _get_default_tasks_for_children(self, task: str) -> Dict[str, Any]:
+        """
+        Provide default tasks for children when JSON parsing fails.
+        Uses the same task for all children as a fallback so they can still execute.
+        """
+        default_tasks = {}
+        for child in self.children:
+            # Use the same task for each child as fallback
+            default_tasks[child.agent_id] = task
+        self.logger.warning(
+            f"Agent '{self.agent_id}' using default tasks for children (parsing failed): {list(default_tasks.keys())}"
+        )
+        return default_tasks
 
     def summarize_results(
         self, children_results: Dict[str, Any], own_result: Any
@@ -1062,19 +1253,35 @@ class BaseAgent:
         prompt = "Summarize the results from children agents:\n"
         for agent_id, result in children_results.items():
             prompt += f"- Agent '{agent_id}': {result}\n"
+        
+        # For Anthropic/Claude, the first message must have role='user', not 'system'
+        is_anthropic = "claude" in self.llm.lower() or "anthropic" in self.llm.lower()
+        if is_anthropic:
+            messages = [{"role": "user", "content": prompt}]
+        else:
+            messages = [{"role": "system", "content": prompt}]
+        
         response = model_prompting(
             llm_model=self.llm,
-            messages=[{"role": "system", "content": prompt}],
+            messages=messages,
             return_num=1,
             max_token_num=512,
             temperature=0.7,
             top_p=1.0,
         )[0]
         summary = response.content if response.content else ""
-        messages = [
-            {"role": "system", "content": prompt},
-            {"role": "system", "content": summary},
-        ]
+        
+        # Update messages for token counting
+        if is_anthropic:
+            messages = [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": summary},
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": prompt},
+                {"role": "system", "content": summary},
+            ]
         self.token_usage += token_counter(model=self.llm, messages=messages)
         return summary
 
