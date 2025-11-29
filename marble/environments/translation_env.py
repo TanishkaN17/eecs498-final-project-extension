@@ -416,7 +416,7 @@ class TranslationEnvironment(BaseEnvironment):
     def _submit_translation(
         self, 
         translation: str, 
-        rationale: str, 
+        rationale: Optional[str] = None, 
         input_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -424,12 +424,25 @@ class TranslationEnvironment(BaseEnvironment):
 
         Args:
             translation: The English translation
-            rationale: Explanation for the translation
+            rationale: Explanation for the translation (required but can be None for validation)
             input_id: ID of the input text (optional)
 
         Returns:
             Dict with submission result and evaluation scores
         """
+        # Validate required parameters
+        if not translation or not translation.strip():
+            return {
+                "success": False,
+                "error": "translation parameter is required and cannot be empty"
+            }
+        
+        if not rationale or not rationale.strip():
+            return {
+                "success": False,
+                "error": "rationale parameter is REQUIRED. You must provide an explanation for your translation. Please call submit_translation(translation=\"...\", rationale=\"...\") with both parameters."
+            }
+        
         # Get current input if not specified
         if not input_id:
             if self.current_input_index < len(self.input_texts):

@@ -904,7 +904,11 @@ class Engine:
                     agent_tasks_str,
                     results_str,
                 )
-                self.evaluator.evaluate_kpi(self.task, results_str)
+                # Wrap KPI evaluation in try-except to prevent crashes from rate limiting
+                try:
+                    self.evaluator.evaluate_kpi(self.task, results_str)
+                except Exception as e:
+                    self.logger.warning(f"KPI evaluation failed (likely due to rate limiting): {e}. Continuing simulation.")
 
                 # Check if task is complete by checking environment's final_translations (for translation tasks)
                 # This is more reliable than text parsing
@@ -1156,6 +1160,10 @@ class Engine:
             tasks.append(tasks_for_children)
             children_results = []
             communications = []
+            # Log all children to debug missing agents
+            child_ids = [child.agent_id for child in agent.children]
+            self.logger.info(f"Agent '{agent.agent_id}' has {len(agent.children)} children: {child_ids}")
+            
             for child in agent.children:
                 child_task = tasks_for_children.get(child.agent_id, "")
                 # If no specific task assigned, use parent's task as fallback
@@ -1165,15 +1173,24 @@ class Engine:
                         f"No task assigned to child '{child.agent_id}', using parent's task as fallback"
                     )
                 # Execute child with assigned or fallback task
-                (
-                    child_result,
-                    communication,
-                    tasks_,
-                ) = self._execute_agent_task_recursive(child, child_task)
-                tasks += tasks_
-                if communication:
-                    communications.append(communication)
-                children_results += child_result
+                try:
+                    (
+                        child_result,
+                        communication,
+                        tasks_,
+                    ) = self._execute_agent_task_recursive(child, child_task)
+                    tasks += tasks_
+                    if communication:
+                        communications.append(communication)
+                    children_results += child_result
+                except Exception as e:
+                    self.logger.error(f"Error executing child agent '{child.agent_id}': {e}")
+                    # Continue with other children even if one fails
+                    children_results.append({
+                        "agent_id": child.agent_id,
+                        "result": f"Error during execution: {str(e)}",
+                        "error": True
+                    })
             # Agent may also act itself
             results_str = "\n".join(
                 json.dumps(result)[:500] for result in children_results
@@ -1359,21 +1376,75 @@ class Engine:
         
         final_output["presentations_to_judge"] = presentations_to_judge
         
-        # FIRST: Try to extract from iteration summaries (most reliable source)
+        # ZERO: First check task_results for judge_decision function calls (most direct source)
         iterations = summary_data.get("iterations", [])
         if iterations:
+            for iteration in iterations:
+                task_results = iteration.get("task_results", [])
+                for result_dict in task_results:
+                    if "judge" in result_dict:
+                        judge_result = result_dict["judge"]
+                        if isinstance(judge_result, str):
+                            # Look for judge_decision function call results
+                            # Pattern: judge_decision was called with final_translation
+                            import re
+                            # Look for function call result format: {"success": true, "final_translation": "..."}
+                            func_result_match = re.search(r'"final_translation"\s*:\s*"((?:[^"\\]|\\.)*)"', judge_result, re.IGNORECASE)
+                            if func_result_match:
+                                extracted = func_result_match.group(1)
+                                extracted = extracted.replace('\\"', '"').replace('\\n', ' ').replace('\\\\', '\\')
+                                extracted = ' '.join(extracted.split())
+                                if extracted and self._is_valid_translation(extracted):
+                                    final_output["final_translation"] = extracted
+                                    self.logger.info(f"Extracted final translation from judge_decision function result: '{extracted}'")
+                                    break
+                            # Also check for "decision": "finalized" pattern
+                            if '"decision": "finalized"' in judge_result.lower() or '"decision":"finalized"' in judge_result.lower():
+                                # Try to extract the translation from the same result
+                                if not final_output["final_translation"]:
+                                    # Look for any quoted text that looks like a translation
+                                    trans_match = re.search(r'["\']([A-Z][^"\']{5,})["\']', judge_result)
+                                    if trans_match:
+                                        extracted = trans_match.group(1).strip()
+                                        if self._is_valid_translation(extracted):
+                                            final_output["final_translation"] = extracted
+                                            self.logger.info(f"Extracted final translation from judge decision text: '{extracted}'")
+        
+        # FIRST: Try to extract from iteration summaries (most reliable source)
+        if not final_output["final_translation"] and iterations:
             for iteration in iterations:
                 summary = iteration.get("summary", "")
                 # Handle case where summary might be a Message object
                 if hasattr(summary, 'content'):
                     summary = summary.content
                 if summary and isinstance(summary, str):
+                    # Extract JSON from markdown code blocks if present
+                    json_content = summary
+                    if "```json" in summary or "```" in summary:
+                        import re
+                        # Extract content from JSON code block
+                        json_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', summary, re.DOTALL)
+                        if json_block_match:
+                            json_content = json_block_match.group(1)
+                            # Try to parse as JSON and extract final_translation
+                            try:
+                                import json as json_module
+                                parsed_json = json_module.loads(json_content)
+                                if "final_translation" in parsed_json:
+                                    extracted = str(parsed_json["final_translation"]).strip()
+                                    if extracted and self._is_valid_translation(extracted):
+                                        final_output["final_translation"] = extracted
+                                        self.logger.info(f"Extracted final translation from JSON code block: '{extracted}'")
+                                        break
+                            except:
+                                pass  # Fall through to regex extraction
+                    
                     # Look for "final_translation": "..." pattern in summary JSON
-                    if '"final_translation"' in summary.lower() or "'final_translation'" in summary.lower():
+                    if '"final_translation"' in json_content.lower() or "'final_translation'" in json_content.lower():
                         import re
                         # Try multiple patterns to extract the translation
                         # Pattern 1: Standard JSON format: "final_translation": "text" (allowing newlines with DOTALL)
-                        translation_match = re.search(r'["\']final_translation["\']\s*:\s*["\']((?:[^"\'\\]|\\.)*)["\']', summary, re.IGNORECASE | re.DOTALL)
+                        translation_match = re.search(r'["\']final_translation["\']\s*:\s*["\']((?:[^"\'\\]|\\.)*)["\']', json_content, re.IGNORECASE | re.DOTALL)
                         if translation_match:
                             extracted = translation_match.group(1).strip()
                             # Unescape any escaped characters
@@ -1414,6 +1485,16 @@ class Engine:
                                         final_output["final_translation"] = extracted
                                         self.logger.info(f"Extracted final translation from iteration summary (pattern 3): '{extracted}'")
                                         break
+                        # Pattern 4: Handle sonnet model format - might use different quote styles or formatting
+                        if not final_output["final_translation"]:
+                            # Look for "Final Translation:" or "final translation:" followed by text
+                            sonnet_match = re.search(r'(?:final\s+translation|final_translation)[:\s]+["\']?([A-Z][^"\']{5,})["\']?', summary, re.IGNORECASE)
+                            if sonnet_match:
+                                extracted = sonnet_match.group(1).strip()
+                                if self._is_valid_translation(extracted):
+                                    final_output["final_translation"] = extracted
+                                    self.logger.info(f"Extracted final translation from sonnet format: '{extracted}'")
+                                    break
         
         # SECOND: Try to extract from iterations task results
         if not final_output["final_translation"] and iterations:

@@ -8,7 +8,7 @@
 # Final: Proposer & Critic → Judge (final decision)
 
 coordinate_mode: tree
-llm: "claude-3-haiku-20240307" # Using Claude (5 requests/min limit - rate limiter handles this)
+llm: "claude-sonnet-4-5-20250929" # Using Claude (5 requests/min limit - rate limiter handles this)
 
 environment:
   type: Translation
@@ -115,22 +115,34 @@ agents:
       1. IMMEDIATELY call get_current_input() to get the Hindi text to translate
       2. BEFORE creating your translation, call get_banned_translations() to see what translations already exist (especially from the Proposer team)
       3. Create an ALTERNATIVE English translation that is SUBSTANTIALLY DIFFERENT from all existing translations
-      4. IMMEDIATELY call submit_translation() with your translation and rationale, focusing on:
-         - Alternative interpretations or phrasings
-         - Different stylistic approaches
-         - Different word choices or sentence structures
+      4. IMMEDIATELY call submit_translation() - THIS IS CRITICAL!
+         YOU MUST provide BOTH translation AND rationale parameters - BOTH ARE REQUIRED!
+         Example function call:
+         submit_translation(
+           translation="Your unique English translation here",
+           rationale="A detailed explanation of why your translation is good, how it differs from existing translations, and why it's accurate/natural/culturally appropriate"
+         )
+         The rationale must be a complete explanation (at least 2-3 sentences) covering:
+         - Why your translation is accurate
+         - How it differs from existing translations
+         - Alternative interpretations or phrasings you used
+         - Different stylistic approaches or word choices
          - Why your choices are more natural/accurate/culturally appropriate
-         - How your translation differs from existing ones
       5. Communicate with translator_3 to discuss and refine your translations
       6. After discussion, present your final translation to the Critic organizer
 
-      CRITICAL - YOU MUST USE FUNCTION CALLING:
-      - Step 1: Call the get_current_input() FUNCTION
-      - Step 2: Call the get_banned_translations() FUNCTION to see existing translations
+      CRITICAL - YOU MUST USE FUNCTION CALLING CORRECTLY:
+      - Step 1: Call get_current_input() FUNCTION
+      - Step 2: Call get_banned_translations() FUNCTION to see existing translations
       - Step 3: Create a SUBSTANTIALLY DIFFERENT alternative translation
-      - Step 4: Call the submit_translation() FUNCTION with translation="..." and rationale="..."
+      - Step 4: IMMEDIATELY call submit_translation() FUNCTION - DO NOT skip this step!
+        You MUST provide BOTH translation="..." AND rationale="..." parameters.
+        DO NOT call submit_translation() without the rationale parameter - this will cause an error!
+        Example: submit_translation(translation="The hair has extended to great length", rationale="This translation uses different vocabulary and structure...")
       - Step 5: Communicate with translator_3 to discuss and debate
       - Step 6: Present your final translation to the Critic organizer
+
+      REMEMBER: You MUST call submit_translation() with BOTH translation and rationale parameters. If you fail to provide rationale, your submission will fail!
 
       IMPORTANT: Your translation MUST be substantially different from any existing translations, especially from the Proposer team. Use get_banned_translations() to check!
 
@@ -217,6 +229,16 @@ agents:
       - Use judge_decision() to either finalize or request another round
       - If you request another round (decision="another_round"), provide reasoning for what needs improvement
 
+      EXAMPLE OF CORRECT BEHAVIOR:
+      When you see both proposer and critic have submitted translations, you MUST call:
+      judge_decision(
+        decision="finalize",
+        final_translation="The hair is very long",  # Choose one of the translations or create a hybrid
+        reasoning="After evaluating both translations, I choose this one because..."
+      )
+
+      DO NOT just describe what you will do - ACTUALLY CALL the judge_decision() function with decision="finalize"!
+
 # Tree structure relationships (parent-child hierarchy)
 relationships:
   # Root level: Judge is the root
@@ -243,11 +265,11 @@ engine_planner:
   initial_progress: "Starting hierarchical translation task with 6-agent tree structure."
 
 output:
-  file_path: "translation_output_tree.json"
+  file_path: "translation_output_tree_2.json"
 
 metrics:
   # Evaluation metrics can be configured here
   # The framework will track communication and planning scores
   evaluate_llm:
-    model: "claude-3-haiku-20240307" # Use same LLM as main task for evaluation
+    model: "claude-sonnet-4-5-20250929" # Use same LLM as main task for evaluation
 

@@ -174,18 +174,30 @@ class Evaluator:
         # Fill in the placeholders {task} and {agent_results}
         prompt = kpi_prompt_template.format(task=task, agent_results=agent_results)
         # Call the language model
-        result = model_prompting(
-            llm_model=self.llm,
-            messages=[{"role": "user", "content": prompt}],
-            return_num=1,
-            max_token_num=512,
-            temperature=0.0,
-            top_p=None,
-            stream=None,
-        )[0]
-        # Parse the milestones from result.content
-        assert isinstance(result.content, str)
-        milestones = self.parse_milestones(result.content)
+        try:
+            result = model_prompting(
+                llm_model=self.llm,
+                messages=[{"role": "user", "content": prompt}],
+                return_num=1,
+                max_token_num=512,
+                temperature=0.0,
+                top_p=None,
+                stream=None,
+            )
+            # Handle case where model_prompting returns None (rate limit errors, etc.)
+            if not result or len(result) == 0 or result[0] is None:
+                self.logger.warning("evaluate_kpi: model_prompting returned None or empty result, skipping KPI evaluation")
+                return
+            result = result[0]
+            # Parse the milestones from result.content
+            if not hasattr(result, 'content') or not result.content:
+                self.logger.warning("evaluate_kpi: result has no content, skipping KPI evaluation")
+                return
+            assert isinstance(result.content, str)
+            milestones = self.parse_milestones(result.content)
+        except Exception as e:
+            self.logger.error(f"evaluate_kpi: Error during KPI evaluation: {e}, skipping")
+            return
         # Update the metrics
         self.metrics["total_milestones"] += len(milestones)
         for milestone in milestones:
