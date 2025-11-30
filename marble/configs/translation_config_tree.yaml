@@ -265,7 +265,7 @@ engine_planner:
   initial_progress: "Starting hierarchical translation task with 6-agent tree structure."
 
 output:
-  file_path: "translation_output_tree_2.json"
+  file_path: "translation_output_TREE_SONNET.json"
 
 metrics:
   # Evaluation metrics can be configured here

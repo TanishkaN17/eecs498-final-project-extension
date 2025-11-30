@@ -7,7 +7,7 @@ echo "MARBLE Translation Task Runner"
 echo "=========================================="
 
 # Check if config file exists
-CONFIG_FILE="marble/configs/translation_config.yaml"
+CONFIG_FILE="marble/configs/translation_config_tree.yaml"
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: Config file not found at $CONFIG_FILE"
@@ -33,7 +33,9 @@ echo "Starting translation task..."
 echo "Config: $CONFIG_FILE"
 echo ""
 
-python -m marble.main --config_path "$CONFIG_FILE"
+# python -m marble.main --config_path "$CONFIG_FILE"
+poetry run python -m marble.main --config_path "$CONFIG_FILE"
+
 
 echo ""
 echo "=========================================="

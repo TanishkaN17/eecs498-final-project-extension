@@ -33,6 +33,7 @@ psycopg2-binary = "^2.9.10"
 pymysql = "^1.1.1"
 colorlog = "^6.9.0"
 ruamel-yaml = "^0.18.16"
+pyyaml = "^6.0.3"
 
 
 [tool.poetry.group.dev.dependencies]
