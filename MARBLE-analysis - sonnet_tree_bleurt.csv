@@ -1,0 +1,53 @@
+hindi,reference,final translations,translation_1,bleurt_1,translation_2,bleurt_2,translation_3,bleurt_3,translation_4,bleurt_4
+बाल बहुत लंबे हैं,The hair is very long,The hair is very long,The hair is very long,1.085258961,Her hair has grown extremely long,0.07241211832,The locks have become exceedingly lengthy,-1.195465207,Those tresses extend remarkably far,-1.027122974
+कल नहीं आएगा,He will not come tomorrow,Won't come tomorrow,Won't come tomorrow,-0.0681155026,Will not be coming tomorrow,-0.2544500232,"Tomorrow, he will not arrive",0.4215441942,He's not going to show up tomorrow,0.6270148754
+उसका हाथ साफ़ है,He's innocent,His hand is clean,His hand is clean,-1.157892108,Her hand is pure,-1.538257718,That person's hand is spotless,-1.573602319,Their hands are free from dirt,-1.386983871
+वह ऊपर गिर गया,He fell from above,He fell down from above,He fell down from above,1.029940009,He tumbled from up there,0.3452735841,He dropped down from the top,0.5092432499,He collapsed downward from overhead,0.6693742275
+दिल बैठ गया,He lost courage,My heart sank,My heart sank,-0.9004108906,My heart felt heavy,-0.9741788507,The heart became disheartened,-1.011914968,I lost heart,-0.6704289317
+दाल में कुछ काला है,Something's fishy,Something fishy is going on,Something fishy is going on,0.5535238981,There's something suspicious happening,-0.7754056454,There's something not quite right here,-0.9894151688,Something's off about this situation,-0.921925962
+उसने आकाश छू लिया,He achieved great success,He touched the sky,He touched the sky,-1.539176345,He reached unprecedented heights,0.5277164578,He soared to extraordinary success,0.5724644661,He achieved remarkable heights of glory,0.5379609466
+कल मैं बहुत पीछे था,Yesterday I was far behind,Yesterday I was very far behind,Yesterday I was very far behind,1.054031491,I was lagging quite a bit yesterday,-0.00328614749,I was trailing by a lot yesterday,-0.3767070174,"Yesterday, I had fallen way back",0.1005803943
+उसकी आँखें खुल गईं,He realized the truth,Her eyes opened,Her eyes opened,-1.607128143,His eyes flew open,-0.895983696,Their eyes came open,-1.030352592,She opened her eyes,-1.527944565
+हमारे हाथ पाँव फूल गए,Unable to move freely,Our hands and feet have become swollen,Our hands and feet have become swollen,-1.545385361,Our limbs have swelled up,-1.616237521,Our hands and feet are bloated,-1.555618763,My hands and feet have puffed up,-1.671456695
+आँखों का तारा है,Very beloved person,The apple of one's eye,The apple of one's eye,-1.551815271,Is the pupil of the eyes,-1.727098703,She is the star of the eyes,-1.549460649,You are the light of my eyes,-1.539878726
+वह बूंद-बूंंद गिन रहा है,He is calculating every little bit,He is counting drop by drop,He is counting drop by drop,-0.5452808142,He is counting each and every drop,-0.436719358,He is meticulously tallying every single droplet,-0.5977169275,He's carefully measuring out drop after drop,-0.4391004741
+वह हाथ पर हाथ धरकर बैठा है,He is sitting idle,He is sitting with his hands placed one upon the other,He is sitting with his hands placed one upon the other,-0.6722946167,He sits there with one hand resting on the other,-0.2802201211,He is seated with hands folded over each other,-0.2361897528,,
+वह चला गया,He left,He went away,He went away,0.7751253843,He left,1.163246036,He departed,0.8654900193,He took off,0.4109511077
+वह ऊपर गया,He died,He climbed up,He went upstairs,-1.293705583,He went up,-1.034801364,He ascended,-1.249596,He moved upward,-1.432360768
+वह भगवान के पास चला गया,He died,He went to God,He went to God,-1.215130925,He proceeded towards the Lord,-1.526186109,He walked over to the Divine One,-1.467263937,He made his way to the presence of the Almighty,-1.481418014
+मुझे ठंड लग रही है,The cold is stuck to me,I am feeling cold,I am feeling cold,0.2314816117,I'm getting cold,0.09240823984,The cold is affecting me,0.4759124517,,
+वह भारी है,He is important,It is heavy,It is heavy,-1.412300825,That one is weighty,-1.595638871,That is quite heavy,-1.229516625,That's a heavy one,-1.080288887
+उसका दिल बड़ा है,He is generous,He has a big heart,He has a big heart,-0.170185253,She is very generous,-0.6236848235,That person is kind-hearted,-0.3380112946,Their heart is full of compassion,-0.6230826378
+वह साफ है,He is clear,He is clean,He is clean,-0.2206169665,That is clean,-0.9108254313,It is clean,-1.00047195,She is clean,-1.55962038
+वह हल्का है,He is mild or not serious,He is light,He is light,-0.8472488523,He is lightweight,-0.9271271825,That one is not heavy,-1.274968743,It weighs very little,-1.340335131
+वह सीधा है,He is simple or honest.,He is straightforward,He is straightforward,0.3912921548,He is honest,0.2355249822,He is simple,-0.06343200803,He is uncomplicated,-0.7714409828
+वह भारी आवाज़ में बोला,He spoke in a deep or serious tone.,He spoke in a heavy voice,He spoke in a heavy voice,0.2582704723,He uttered words in a deep tone,0.4122192562,He spoke with a grave voice,0.3665455282,He said it in a weighty manner,-0.3824590743
+वह बड़ा है,He is older,He is big,He is big,-0.5623192787,He is large,-0.7227475047,That one is great,-1.30932188,He is elder,0.2335377932
+उसका चेहरा उतर गया,He was disappointed,His face fell,His face fell,-0.5635282397,Her expression dropped,-1.387042522,Their countenance became downcast,-1.041723609,His spirits sank,-0.9390420318
+वह चला रहा है,He is driving,He is walking away,He is walking away,-0.9428858757,He is going,-0.06595318019,He keeps moving forward,-0.4904114306,He continues on his way,-0.2579658329
+वह काम नहीं करता,He is unemployed,He doesn't do the work,He doesn't do the work,-0.5607027411,He does not work,-0.2078667134,He refuses to perform that task,-0.5455931425,He isn't doing that job,-0.6485248208
+उसका मूड खराब है,He is upset,He is in a bad mood,He is in a bad mood,0.1142789721,His mood is spoiled,-0.4515140355,She's feeling upset,-0.7802368999,He's not in good spirits,-0.1818740368
+वह जल गया,He is jealous,He got burned,He got burned,-1.873752356,He was burnt,-1.792466164,He burned up,-1.716910601,He caught fire,-1.687473893
+वह खुला है,It is available,It is open,It is open,0.3662151396,That one is open,-0.7014560699,That is open,-0.3392019272,He is open,-1.253584504
+वह मेरे हाथों में टूट गया,He broke down in my hands,It broke in my hands,It broke in my hands,-0.4853268862,It shattered in my grasp,-0.2912938893,It fell apart while I was holding it,-0.562479198,,
+उसका चेहरा चमक रहा है,He is happy,Her face is glowing,Her face is glowing,-1.774176121,His face is radiating brightness,-1.034408569,Their face is shining brightly,-1.340481877,That person's face is beaming with light,-0.9592523575
+वह हिल गया,He was emotionally taken,He moved,He moved,-0.9324135184,He shifted,-1.278503299,It swayed,-1.596813798,He stirred,-1.408924699
+यह बात बड़ी है,This matter is serious,This is a significant matter,This is a significant matter,0.5355731249,This thing is big,0.03261817992,This matter is of great importance,0.4788433313,This is a major issue,0.616820693
+उसकी तबीयत खराब है,He is sick,Her health is poor,Her health is poor,-0.7831240892,His condition is not well,-0.1334565282,She is feeling unwell,-1.254613876,He's not doing well,-0.4713872373
+वह चल रहा है,It is ongoing / in progress,He is walking,He is walking,-1.677405715,He is going,-1.449239016,He keeps moving,-1.137007356,He continues on his way,-1.055143356
+वह खाली है,He is free,It is empty,It is empty,-0.8909909725,That is vacant,-0.9828785062,She is unoccupied,-1.60100925,He is free,1.090800166
+उसका दिमाग ख़ाली है,He is stupid,His mind is vacant,His mind is vacant,-1.286419868,Her brain is empty,-1.812908888,Their head is completely empty,-1.752877831,That person's mind is blank,-1.179922462
+वह भारी काम है,It is difficult work,That is a difficult task,That is a difficult task,0.4903931022,That's a heavy job,0.0931725353,It's a tough piece of work,0.8037737608,That's quite a burden,0.1444998235
+वह गिरा हुआ आदमी है,He is corrupt,He is a fallen man,He is a fallen man,-0.493267566,That man has fallen from grace,-1.028221965,That person is someone who has experienced a downfall,-0.2659399211,He's a man who has come down in the world,-0.6652086377
+वह तेज दिमाग वाला है,He is clever,He is sharp-minded,He is sharp-minded,0.2648045123,He has a brilliant mind,0.2047106326,He possesses a keen intellect,0.1611376852,He is quick-witted,0.2597641051
+वह हल्की आवाज़ में बोला,He spoke softly,He spoke in a soft voice,He spoke in a soft voice,0.9640950561,He spoke softly,1.070387959,She spoke in a gentle tone,-0.4085600972,He uttered words in a hushed manner,0.6659799814
+वह ऊँचा बोलता है,He speakes loudly,He speaks loudly,He speaks loudly,0.8017349243,He talks in a loud voice,0.619353056,He raises his voice when speaking,0.3351660967,He has a loud manner of speaking,0.2077770084
+वह अपने ही पैरों पर खड़ा है,He is indepenent,He stands on his own two feet,He stands on his own two feet,-0.7339954376,He is standing on his own feet,-0.8380430937,He is self-reliant and independent,0.3046118617,He supports himself without depending on others,-0.5042691231
+दिल जलना,Jealousy or Envy,Heart burning with jealousy,Heart burning with jealousy,-1.066223383,Feeling envious,-0.742653966,The heart is ablaze,-1.645150185,Heartache and resentment,0.04991299286
+उसका दिमाग खराब है,He is crazy,His mind is damaged,His mind is damaged,-0.9732306004,He has lost his senses,-0.7529739738,He's not in his right mind,-0.6537234187,,
+उसकी बोलती बंद हो गई,He is speachless,She fell silent,She fell silent,-1.38582325,Her voice went quiet,-1.243729711,She stopped speaking,-1.42649889,She was rendered speechless,-1.40806818
+वह बड़ी मछली है,He is powerful,That is a large fish,That is a large fish,-1.627770543,It is a big fish,-1.501029253,She is a huge fish,-1.626447082,That's one big fish,-1.580047369
+,,,,,,,,,,
+,,,47,17,,11,,9,,11
+,which one chosen as final,,,,,,,,,
+,highest bleurt,,,,,,,,,

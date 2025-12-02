@@ -1,0 +1,62 @@
+input,reference,graph haiku out,graph haiku bleurt,graph haiku comet,graph sonnet out,graph sonnet bleurt,graph sonnet comet,tree haiku out,tree haiku bleurt,tree haiku comet,tree sonnet out,tree sonnet bleurt,tree sonnet comet
+बाल बहुत लंबे हैं,The hair is very long,The hair is extremely lengthy.,0.7239092588,0.9123976231,Her hair is extremely lengthy.,0.287017107,0.9224270582,The hair is very long.,1.106876969,0.9633927345,The hair is very long,1.085258961,0.983782053
+कल नहीं आएगा,He will not come tomorrow,He will not come tomorrow.,1.053645015,0.9773092866,Will not be coming tomorrow,-0.2544500232,0.8909364939,He will not come tomorrow.,1.053645015,0.9773092866,Won't come tomorrow,-0.0681155026,0.9070114493
+उसका हाथ साफ़ है,He's innocent,His hand is clean.,-1.278319836,0.7147472501,Her hands are clean,-1.478220344,0.6772915125,The man's palm is spotless.,-1.494989157,0.6525714397,His hand is clean,-1.157892108,0.678524673
+वह ऊपर गिर गया,He fell from above,He fell down,0.224412784,0.8076703548,He fell down.,0.1048637033,0.7952730656,The man tumbled down from above.,0.6680929065,0.8763050437,He fell down from above,1.029940009,0.9651913643
+दिल बैठ गया,He lost courage,My heart sank.,-0.7763742208,0.7204627991,My heart sank,-0.9004108906,0.6900247931,The heart has sunk,-0.8175852895,0.5857663155,My heart sank,-0.9004108906,0.6900247931
+दाल में कुछ काला है,Something's fishy,There appear to be some dark specks in the lentils.,-1.136376619,0.4982095659,Something suspicious is going on here.,-0.3586905003,0.8109699488,There is something black in the dal,-1.317365646,0.5809057355,Something fishy is going on,0.5535238981,0.9181481004
+उसने आकाश छू लिया,He achieved great success,He touched the sky,-1.539176345,0.6192086339,He touched the sky,-1.539176345,0.6192086339,He reached up and touched the sky.,-1.462674856,0.5756608248,He touched the sky,-1.539176345,0.6192086339
+कल मैं बहुत पीछे था,Yesterday I was far behind,I was quite behind yesterday.,0.3345292509,0.8710830212,I was running quite late yesterday.,-0.4705350697,0.6269419789,"Yesterday, I was very behind.",0.3773757815,0.9382247329,Yesterday I was very far behind,1.054031491,0.9680261612
+उसकी आँखें खुल गईं,He realized the truth,Her eyes opened,-1.607128143,0.6754732728,His eyes opened wide,-0.6242258549,0.6190572381,Her eyes opened wide.,-1.409509897,0.6273440719,Her eyes opened,-1.607128143,0.6754732728
+हमारे हाथ पाँव फूल गए,Unable to move freely,Our hands and feet have bloomed,-1.739520788,0.488612324,Our hands and feet are swollen,-1.64893496,0.4921596348,Our hands and feet have bloomed,-1.739520788,0.488612324,Our hands and feet have become swollen,-1.545385361,0.4983771145
+आँखों का तारा है,Very beloved person,The apple of one's eye,-1.551815271,0.4118374586,The star of the eyes,-1.658413172,0.4409812391,The star of the eyes,-1.658413172,0.4409812391,The apple of one's eye,-1.551815271,0.4118374586
+वह बूंद-बूंंद गिन रहा है,He is calculating every little bit,N/A,-1.822886825,0.415913403,He is meticulously counting each and every drop.,-0.03639885783,0.7335377932,That drop-by-drop is counting,-1.270048857,0.6155005097,He is counting drop by drop,-0.5452808142,0.6985647678
+वह हाथ पर हाथ धरकर बैठा है,He is sitting idle,He is sitting with his hands clasped together,-0.247650817,0.6953276396,He is sitting with his hands folded.,0.01348767057,0.6809518337,The man is seated with his palms clasped together.,-0.3205745518,0.618498683,He is sitting with his hands placed one upon the other,-0.6722946167,0.5857759118
+वह चला गया,He left,He departed,0.8654900193,0.8857514858,He went away.,0.6524625421,0.8780706525,He has gone away.,0.5043634176,0.8320719004,He went away,0.7751253843,0.890583992
+वह ऊपर गया,He died,He climbed up.,-1.44794023,0.5234233141,He went upstairs.,-1.264374256,0.5389566422,He went up,-1.034801364,0.575139761,He climbed up,-1.435688376,0.5031419992
+वह भगवान के पास चला गया,He died,He went to God,-1.215130925,0.625423193,He went to God,-1.215130925,0.625423193,He went to the Lord,-1.249111176,0.6294390559,He went to God,-1.215130925,0.625423193
+मुझे ठंड लग रही है,The cold is stuck to me,I'm feeling a bit chilly.,0.3473781347,0.7186729908,I'm getting cold.,0.1716999859,0.7555046678,I am feeling cold.,0.3149641454,0.7842926383,I am feeling cold,0.2314816117,0.7692590356
+वह भारी है,He is important,It is heavy.,-1.622831821,0.7284716368,That is weighty,-1.661022425,0.7960755825,That bulky item appears quite weighty.,-1.552948833,0.5737540126,It is heavy,-1.412300825,0.7456422448
+उसका दिल बड़ा है,He is generous,N/A,-1.742261529,0.5045954585,His heart is big,-0.7846565843,0.6935247779,His heart is big.,-1.028108597,0.7320535779,He has a big heart,-0.170185253,0.7184991241
+वह साफ है,He is clear,N/A,-1.602145314,0.5629754066,He is clean.,-0.7522205114,0.8591227531,The surface is spotless.,-1.595979095,0.6303477287,He is clean,-0.2206169665,0.846991241
+वह हल्का है,He is mild or not serious,It is light.,-1.230036616,0.5794045329,He is lightweight.,-1.006681681,0.5795077682,It is light.,-1.230036616,0.5794045329,He is light,-0.8472488523,0.6746748686
+वह सीधा है,He is simple or honest.,He is straight-forward.,-0.3458324075,0.9025611281,He is straightforward,0.3912921548,0.9054166675,It is straight.,-0.9429039359,0.7036437392,He is straightforward,0.3912921548,0.9054166675
+वह भारी आवाज़ में बोला,He spoke in a deep or serious tone.,He spoke in a booming voice.,-0.07147733867,0.7287881374,He spoke in a loud voice,0.1043513417,0.7946079373,He spoke in a heavy voice.,0.307864517,0.8540266156,He spoke in a heavy voice,0.2582704723,0.8633375764
+वह बड़ा है,He is older,N/A,-1.618568897,0.498385042,He is big.,-0.8641949892,0.724163413,That one is quite large.,-1.395649552,0.5457665324,He is big,-0.5623192787,0.7196104527
+उसका चेहरा उतर गया,He was disappointed,N/A,-1.66044414,0.50103724,His face fell,-0.5635282397,0.6403443813,His face fell,-0.5635282397,0.6403443813,His face fell,-0.5635282397,0.6403443813
+वह चला रहा है,He is driving,He is walking.,-0.6201902628,0.7704205513,He is going.,-0.3023768663,0.7475678325,N/A,-1.593036294,0.5021179318,He is walking away,-0.9428858757,0.7241140008
+वह काम नहीं करता,He is unemployed,He does not perform that work.,-0.7827020884,0.6736484766,He does not do the work,-0.5222213268,0.6295193434,He does not do the work.,-0.577747643,0.6126640439,He doesn't do the work,-0.5607027411,0.6359170675
+उसका मूड खराब है,He is upset,He appears to be in a bad mood.,0.3687409759,0.7320981622,He is in a bad mood.,0.07370200753,0.7747191787,His mood is bad.,-0.3089770377,0.7656709552,He is in a bad mood,0.1142789721,0.7830277681
+वह जल गया,He is jealous,The water has evaporated.,-1.665739536,0.4742947817,He was burned.,-1.901783109,0.5235213041,The water has vanished.,-1.804294586,0.4629193544,He got burned,-1.873752356,0.5083401799
+वह खुला है,It is available,It is open,0.3662151396,0.9078891873,It is open,0.3662151396,0.9078891873,It is open.,-0.07852508128,0.9046812057,It is open,0.3662151396,0.9078891873
+वह मेरे हाथों में टूट गया,He broke down in my hands,The one broke in my hands,-0.4999799132,0.7208746672,It broke in my hands,-0.4853268862,0.78455019,It broke in my hands,-0.4853268862,0.78455019,It broke in my hands,-0.4853268862,0.78455019
+उसका चेहरा चमक रहा है,He is happy,His countenance is radiant.,-0.8839828968,0.5968679786,Her face is radiating brightness.,-1.61143136,0.6375103593,The man,-0.8664447069,0.54095608,Her face is glowing,-1.774176121,0.6857270598
+वह हिल गया,He was emotionally taken,He moved/shifted.,-1.292207003,0.4527579546,He shook,-1.447874665,0.6573842168,The hill moved.,-1.62378335,0.4938196242,He moved,-0.9324135184,0.5527330637
+यह बात बड़ी है,This matter is serious,This is a big deal.,0.2796643674,0.8409021497,This is a serious issue,0.8258500695,0.9404281378,This matter is very important.,0.5335157514,0.9220735431,This is a significant matter,0.5355731249,0.9163577557
+उसकी तबीयत खराब है,He is sick,He is not feeling well.,-0.6095916629,0.8318322897,His health is poor.,0.4905933142,0.8857544065,His health is poor.,0.4905933142,0.8857544065,Her health is poor,-0.7831240892,0.8113014102
+वह चल रहा है,It is ongoing / in progress,He is walking.,-1.704471707,0.5667977333,He is going.,-1.434733748,0.6118457913,He is walking.,-1.704471707,0.5667977333,He is walking,-1.677405715,0.5449683666
+वह खाली है,He is free,It is empty.,-1.060946465,0.675599575,It is empty,-0.8909909725,0.6972671747,It is empty.,-1.060946465,0.675599575,It is empty,-0.8909909725,0.6972671747
+उसका दिमाग ख़ाली है,He is stupid,His mind is vacant.,-1.334554076,0.6885839701,He's got nothing going on upstairs.,-1.58898735,0.4237025976,His mind is empty.,-1.024838567,0.7412397861,His mind is vacant,-1.286419868,0.6968002915
+वह भारी काम है,It is difficult work,N/A,-1.709495306,0.455855757,That's a tough job.,0.3550847769,0.9188757539,It is a heavy task.,0.4621478021,0.9401128888,That is a difficult task,0.4903931022,0.9429883361
+वह गिरा हुआ आदमी है,He is corrupt,The man who has fallen is.,-1.186132431,0.5009663701,He is a fallen man,-0.493267566,0.8119472265,The fallen man is there.,-1.049104333,0.5824177265,He is a fallen man,-0.493267566,0.8119472265
+वह तेज दिमाग वाला है,He is clever,He is a sharp-minded person,0.09029079974,0.774326086,He has a quick intellect.,0.1300072521,0.7283878922,He is a sharp-minded individual.,-0.0942646265,0.7595076561,He is sharp-minded,0.2648045123,0.7755183578
+वह हल्की आवाज़ में बोला,He spoke softly,He spoke softly.,1.08367455,0.9698570371,He spoke in a soft voice,0.9640950561,0.9198480248,He spoke in a gentle tone.,0.8543998003,0.8683232069,He spoke in a soft voice,0.9640950561,0.9198480248
+वह ऊँचा बोलता है,He speakes loudly,He speaks in a loud voice.,0.6409819722,0.9183502197,He speaks loudly.,0.7599617839,0.9616039991,He speaks loudly.,0.7599617839,0.9616039991,He speaks loudly,0.8017349243,0.9662482142
+वह अपने ही पैरों पर खड़ा है,He is indepenent,He is standing on his own two feet.,-0.7954905629,0.5679081082,He is standing on his own feet,-0.8380430937,0.5992466807,He stands on his own two feet.,-0.7500095963,0.5579056144,He stands on his own two feet,-0.7339954376,0.5595929027
+दिल जलना,Jealousy or Envy,My heart is burning,-1.658541918,0.4182202518,Heartburn,-1.191465616,0.3245360553,The heart burns,-1.803753257,0.4288265109,Heart burning with jealousy,-1.066223383,0.7150616646
+उसका दिमाग खराब है,He is crazy,His mind is troubled.,-0.9496107101,0.6729749441,He's out of his mind.,-0.5392989516,0.7854632735,His mind is troubled.,-0.9496107101,0.6729749441,His mind is damaged,-0.9732306004,0.7447912693
+उसकी बोलती बंद हो गई,He is speachless,Her speech has stopped,-1.357868552,0.7488561273,She was left speechless,-1.399302363,0.7404798865,Her speech was silenced.,-1.395508528,0.7784324288,She fell silent,-1.38582325,0.7343871593
+वह बड़ी मछली है,He is powerful,That is a large fish over there.,-1.766213655,0.5944923162,That is a big fish,-1.554100394,0.7029898763,That is a large fish.,-1.670791149,0.6900538802,That is a large fish,-1.627770543,0.7290863991
+वह बहुत हवा में उड़ रहा है,He is flying in the air a lot,The bird is soaring gracefully through the sky.,-0.4822416604,0.685400784,He is flying very high in the air.,0.3081994653,0.8655055761,He is soaring high in the air.,0.2625353336,0.803166151,N/A,-1.731214166,0.3832285404
+उसके पेट में चूहे कूद रहे हैं,He is really hungry,Mice are hopping around in his stomach.,-1.411707997,0.4805123806,He has butterflies in his stomach.,-0.728687048,0.4755938351,There are mice scurrying inside his abdomen.,-1.509663939,0.5310119987,N/A,-1.751753688,0.419326663
+,,,,,,,,,,,,,
+,,Average Scores:,-0.7929730844,0.6657606012,,-0.5602454715,0.7169323492,,-0.6947702309,0.689090777,,-0.5122084975,0.7427361167
+,,,,,,,,,,,,,
+,,graph vs. tree,19,16,,18,17,,25,28,,20,21
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
+,,,which did better,,,,,,,,,,
+,,,,bleurt haiku,,,,,,,,,
+,,,,comet haiku,,,,,,,,,
+,,,,bleurt sonnet,,,,,,,,,
+,,,,comet sonnet,,,,,,,,,
